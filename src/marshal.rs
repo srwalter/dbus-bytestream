@@ -387,4 +387,3 @@ fn test_array () {
     array.dbus_encode(&mut buf);
     assert_eq!(buf, bytes);
 }
-

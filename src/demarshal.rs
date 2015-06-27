@@ -3,6 +3,7 @@ use std::mem::transmute;
 
 use dbus_serialize::types::{Value,BasicValue,Path,Signature,Struct};
 
+#[derive(Debug)]
 pub enum DemarshalError {
     MessageTooShort,
     CorruptedMessage,
@@ -259,5 +260,121 @@ pub fn demarshal(buf: &mut Vec<u8>, offset: &mut usize, sig: &mut String) -> Res
         '{' => demarshal_struct(buf, offset, sig),
         'v' => demarshal_variant(buf, offset),
         _ => Err(DemarshalError::BadSignature)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use marshal::Marshal;
+    use demarshal::demarshal;
+    use dbus_serialize::types::{Value,BasicValue,Signature};
+
+    #[test]
+    fn test_demarshal_u32() {
+        let mut buf = Vec::new();
+        let x = 16 as u32;
+        let mut sig = x.get_type().to_string();
+        x.dbus_encode(&mut buf);
+
+        let mut offset = 0;
+        let v = demarshal(&mut buf, &mut offset, &mut sig).unwrap();
+        assert_eq!(v, Value::BasicValue(BasicValue::Uint32(16)));
+        assert_eq!(buf.len(), 0);
+        assert_eq!(sig, "");
+    }
+
+    #[test]
+    fn test_demarshal_u32_offset() {
+        let mut buf = Vec::new();
+        buf.insert(0, 0);
+        let x = 16 as u32;
+        let mut sig = x.get_type();
+        x.dbus_encode(&mut buf);
+
+        buf.remove(0);
+        let mut offset = 1;
+        let v = demarshal(&mut buf, &mut offset, &mut sig).unwrap();
+        assert_eq!(v, Value::BasicValue(BasicValue::Uint32(16)));
+        assert_eq!(buf.len(), 0);
+        assert_eq!(sig, "");
+    }
+
+    #[test]
+    fn test_string() {
+        let mut buf = Vec::new();
+        let x = "swalter".to_string();
+        let mut sig = x.get_type();
+        x.dbus_encode(&mut buf);
+
+        let mut offset = 0;
+        let v = demarshal(&mut buf, &mut offset, &mut sig).unwrap();
+        assert_eq!(v, Value::BasicValue(BasicValue::String("swalter".to_string())));
+        assert_eq!(buf.len(), 0);
+        assert_eq!(sig, "");
+    }
+
+    #[test]
+    fn test_array() {
+        let mut buf = Vec::new();
+        let x = vec![1 as u32, 2 as u32, 3 as u32];
+        let mut sig = "au".to_string();
+        x.dbus_encode(&mut buf);
+
+        let mut offset = 0;
+        let v = demarshal(&mut buf, &mut offset, &mut sig).unwrap();
+        let arr = match v {
+            Value::Array(x) => x,
+            _ => panic!("Bad return from demarshal {:?}", v)
+        };
+        let golden = vec![
+            Value::BasicValue(BasicValue::Uint32(1)),
+            Value::BasicValue(BasicValue::Uint32(2)),
+            Value::BasicValue(BasicValue::Uint32(3)),
+        ];
+        assert_eq!(arr, golden);
+        assert_eq!(buf.len(), 0);
+        assert_eq!(sig, "");
+    }
+
+    #[test]
+    fn test_array_bytes() {
+        let mut buf = Vec::new();
+        let x = vec![1 as u8, 2 as u8, 3 as u8];
+        let mut sig = "ay".to_string();
+        x.dbus_encode(&mut buf);
+
+        let mut offset = 0;
+        let v = demarshal(&mut buf, &mut offset, &mut sig).unwrap();
+        let arr = match v {
+            Value::Array(x) => x,
+            _ => panic!("Bad return from demarshal {:?}", v)
+        };
+        let golden = vec![
+            Value::BasicValue(BasicValue::Byte(1)),
+            Value::BasicValue(BasicValue::Byte(2)),
+            Value::BasicValue(BasicValue::Byte(3)),
+        ];
+        assert_eq!(arr, golden);
+        assert_eq!(buf.len(), 0);
+        assert_eq!(sig, "");
+    }
+
+    #[test]
+    fn test_struct() {
+        let mut buf = Vec::new();
+        let x = "swalter".to_string();
+        let mut sig = "(ss)".to_string();
+        x.dbus_encode(&mut buf);
+        x.dbus_encode(&mut buf);
+
+        let mut offset = 0;
+        let v = demarshal(&mut buf, &mut offset, &mut sig).unwrap();
+        assert_eq!(buf.len(), 0);
+        assert_eq!(sig, "");
+        let s = match v {
+            Value::Struct(x) => x,
+            _ => panic!("Bad return from demarshal {:?}", v)
+        };
+        assert_eq!(s.signature, Signature("(ss)".to_string()));
     }
 }
