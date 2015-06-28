@@ -5,3 +5,6 @@ authors = ["Steven Walter <stevenrwalter@gmail.com>"]
 
 [dependencies.dbus-serialize]
 git = "https://github.com/srwalter/dbus-serialize.git"
+
+[dependencies]
+unix_socket = "0.4.3"

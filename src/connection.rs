@@ -4,6 +4,7 @@ use std::io;
 use std::io::{Read,Write};
 use std::ops::Deref;
 
+use unix_socket::UnixStream;
 use dbus_serialize::types::{Value,BasicValue};
 
 use message;
@@ -11,8 +12,14 @@ use message::{Message,HeaderFieldName,MessageBuf};
 use demarshal::{demarshal,DemarshalError};
 use marshal::Marshal;
 
+trait StreamSocket : Read + Write { }
+
+impl StreamSocket for TcpStream { }
+impl StreamSocket for UnixStream { }
+
 pub struct Connection {
-    sock: TcpStream,
+    tcp: Option<TcpStream>,
+    uds: Option<UnixStream>,
     next_serial: u32
 }
 
@@ -36,43 +43,79 @@ impl From<DemarshalError> for Error {
     }
 }
 
-macro_rules! read_exactly {
-    ( $sock:ident, $buf:ident, $len:expr ) => {{
-        $buf.truncate(0);
-        $buf.reserve($len);
-        if try!($sock.take($len as u64).read_to_end(&mut $buf)) != $len {
-            return Err(Error::Disconnected);
-        }
-    }};
+fn read_exactly(sock: &mut StreamSocket, buf: &mut Vec<u8>, len: usize) -> Result<(),Error> {
+    buf.truncate(0);
+    buf.reserve(len);
+    if try!(sock.take(len as u64).read_to_end(buf)) != len {
+        return Err(Error::Disconnected);
+    }
+    Ok(())
 }
 
 impl Connection {
-    pub fn connect(addr: &str) -> Result<Connection,Error> {
-        let sock = try!(TcpStream::connect(addr));
-        let mut conn = Connection{sock: sock, next_serial: 1};
+    fn get_sock(&mut self) -> &mut StreamSocket {
+        if self.tcp.is_some() {
+            return self.tcp.as_mut().unwrap();
+        }
+        if self.uds.is_some() {
+            return self.uds.as_mut().unwrap();
+        }
+        panic!("No transport!");
+    }
+
+    fn auth_anonymous(&mut self) -> Result<(),Error> {
+        let sock = self.get_sock();
 
         // Authenticate to the daemon
         let buf = vec![0];
-        try!(conn.sock.write_all(&buf));
-        try!(conn.sock.write_all(b"AUTH ANONYMOUS 6c69626462757320312e382e3132\r\n"));
+        try!(sock.write_all(&buf));
+        try!(sock.write_all(b"AUTH ANONYMOUS 6c69626462757320312e382e3132\r\n"));
 
         // Read response
         // XXX: do a proper line-oriented read...
         let mut buf2 = vec![0; 128];
-        conn.sock.read(&mut buf2).unwrap();
+        sock.read(&mut buf2).unwrap();
 
         // Ready for action
-        try!(conn.sock.write_all(b"BEGIN\r\n"));
+        try!(sock.write_all(b"BEGIN\r\n"));
+        Ok(())
+    }
 
-        // Say Hello
+    fn say_hello(&mut self) -> Result<(),Error> {
         let mut msg = message::create_method_call("org.freedesktop.DBus",
                                                   "/org/freedesktop/DBus",
                                                   "org.freedesktop.DBus",
                                                   "Hello");
-        try!(conn.send(&mut msg));
+        try!(self.send(&mut msg));
 
         // XXX: validate Hello reply
-        conn.read_msg().unwrap();
+        self.read_msg().unwrap();
+        Ok(())
+    }
+
+    pub fn connect_uds(addr: &str) -> Result<Connection,Error> {
+        let sock = try!(UnixStream::connect(addr));
+        let mut conn = Connection {
+            uds: Some(sock),
+            tcp: None,
+            next_serial: 1
+        };
+
+        try!(conn.auth_anonymous());
+        try!(conn.say_hello());
+        Ok(conn)
+    }
+
+    pub fn connect_tcp(addr: &str) -> Result<Connection,Error> {
+        let sock = try!(TcpStream::connect(addr));
+        let mut conn = Connection {
+            tcp: Some(sock),
+            uds: None,
+            next_serial: 1
+        };
+
+        try!(conn.auth_anonymous());
+        try!(conn.say_hello());
         Ok(conn)
     }
 
@@ -95,16 +138,18 @@ impl Connection {
         self.next_serial += 1;
         message::set_length(msg, &buf);
 
-        try!(self.sock.write_all(msg));
+        let sock = self.get_sock();
+        try!(sock.write_all(msg));
         Ok(())
     }
 
     pub fn read_msg(&mut self) -> Result<Message,Error> {
         let mut buf = Vec::new();
-        let sock = &self.sock;
+        let sock = self.get_sock();
+        sock.take(4);
 
         // Read and demarshal the fixed portion of the header
-        read_exactly!(sock, buf, 12);
+        try!(read_exactly(sock, &mut buf, 12));
         let mut offset = 0;
         let mut sig = "(yyyyuu)".to_string();
         let header = match try!(demarshal(&mut buf, &mut offset, &mut sig)) {
@@ -125,7 +170,7 @@ impl Connection {
         msg.serial = u32::from(&v[5]);
 
         // Read array length
-        read_exactly!(sock, buf, 4);
+        try!(read_exactly(sock, &mut buf, 4));
         // demarshal consumes the buf, so save a copy for when we demarshal the entire array
         let mut buf_copy = buf.clone();
         offset = 12;
@@ -160,7 +205,7 @@ impl Connection {
         // Read the padding, if any
         let trailing_pad = 8 - (offset % 8);
         if trailing_pad % 8 != 0 {
-            read_exactly!(sock, buf, trailing_pad);
+            try!(read_exactly(sock, &mut buf, trailing_pad));
         }
 
         // Finally, read the entire body
@@ -176,7 +221,7 @@ impl Connection {
             };
 
             let mut body = Vec::new();
-            read_exactly!(sock, body, body_len as usize);
+            try!(read_exactly(sock, &mut body, body_len as usize));
 
             let mut sig = "(".to_string() + &sigval.0 + ")";
             offset = 0;
@@ -195,7 +240,7 @@ impl Connection {
 
 #[test]
 fn test_connect () {
-    let mut conn = Connection::connect("localhost:12345").ok().unwrap();
+    let mut conn = Connection::connect_tcp("localhost:12345").ok().unwrap();
     let mut msg = message::create_method_call("org.freedesktop.DBus", "/org/freedesktop/DBus",
                                           "org.freedesktop.DBus", "ListNames");
     conn.send(&mut msg).ok();
