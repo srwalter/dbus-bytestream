@@ -14,7 +14,7 @@ pub const MESSAGE_TYPE_ERROR : MessageType          = MessageType(3);
 pub const MESSAGE_TYPE_SIGNAL : MessageType         = MessageType(4);
 
 #[derive(Copy,Clone)]
-enum HeaderFieldName {
+pub enum HeaderFieldName {
     Invalid = 0,
     Path = 1,
     Interface = 2,
@@ -107,7 +107,7 @@ pub struct Message {
     pub version: u8,
     pub serial: u32,
     pub headers: HashMap<u8,Value>,
-    pub body: Vec<u8>
+    pub body: Vec<Value>
 }
 
 #[test]

@@ -2,11 +2,12 @@ use std::net::TcpStream;
 use std::collections::HashMap;
 use std::io;
 use std::io::{Read,Write};
+use std::ops::Deref;
 
-use dbus_serialize::types::Value;
+use dbus_serialize::types::{Value,BasicValue};
 
 use message;
-use message::Message;
+use message::{Message,HeaderFieldName};
 use demarshal::{demarshal,DemarshalError};
 use marshal::Marshal;
 
@@ -162,10 +163,31 @@ impl Connection {
         }
 
         // Finally, read the entire body
-        let mut body = Vec::new();
-        read_exactly!(sock, body, body_len as usize);
-        msg.body = body;
-        println!("{:?}", msg);
+        if body_len > 0 {
+            let v = match msg.headers.get(&(HeaderFieldName::Signature as u8)) {
+                Some(&Value::Variant(ref x)) => x,
+                _ => return Err(Error::DemarshalError(DemarshalError::BadSignature))
+            };
+
+            let sigval = match v.object.deref() {
+                &Value::BasicValue(BasicValue::Signature(ref x)) => x,
+                _ => return Err(Error::DemarshalError(DemarshalError::BadSignature))
+            };
+
+            let mut body = Vec::new();
+            read_exactly!(sock, body, body_len as usize);
+
+            let mut sig = "(".to_string() + &sigval.0 + ")";
+            offset = 0;
+            let objs = match try!(demarshal(&mut body, &mut offset, &mut sig)) {
+                Value::Struct(x) => x.objects,
+                x => panic!("Didn't get a struct: {:?}", x)
+            };
+            for x in objs {
+                msg.body.push(x);
+            }
+        }
+
         Ok(msg)
     }
 }
@@ -176,7 +198,8 @@ fn test_connect () {
     let mut msg = message::create_method_call("org.freedesktop.DBus", "/org/freedesktop/DBus",
                                           "org.freedesktop.DBus", "ListNames");
     conn.send(&mut msg).ok();
-    conn.read_msg().unwrap();
+    let msg = conn.read_msg().unwrap();
+    println!("{:?}", msg.body);
     //loop {
     //    conn.read_msg().unwrap();
     //}
