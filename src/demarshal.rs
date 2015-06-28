@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::mem::transmute;
 
-use dbus_serialize::types::{Value,BasicValue,Path,Signature,Struct};
+use dbus_serialize::types::{Value,BasicValue,Path,Signature,Struct,Variant};
 
 #[derive(Debug)]
 pub enum DemarshalError {
@@ -231,13 +231,17 @@ fn demarshal_struct(buf: &mut Vec<u8>, offset: &mut usize, sig: &mut String) -> 
 
 fn demarshal_variant(buf: &mut Vec<u8>, offset: &mut usize) -> Result<Value,DemarshalError> {
     let mut variant_sig = "g".to_string();
-    let sig = try!(demarshal(buf, offset, &mut variant_sig));
-    let mut s = match sig {
-        Value::BasicValue(BasicValue::Signature(Signature(x))) => x,
+    let sigval = try!(demarshal(buf, offset, &mut variant_sig));
+    let sig = match sigval {
+        Value::BasicValue(BasicValue::Signature(x)) => x,
         _ => return Err(DemarshalError::CorruptedMessage)
     };
+    let mut s = sig.0.to_string();
     let var = try!(demarshal(buf, offset, &mut s));
-    Ok(Value::Variant(Box::new(var)))
+    Ok(Value::Variant(Variant{
+        object: Box::new(var),
+        signature: sig
+    }))
 }
 
 pub fn demarshal(buf: &mut Vec<u8>, offset: &mut usize, sig: &mut String) -> Result<Value,DemarshalError> {

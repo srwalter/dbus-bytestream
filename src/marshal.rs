@@ -2,7 +2,7 @@ use std::mem::transmute;
 use std::hash::Hash;
 use std::collections::HashMap;
 
-use dbus_serialize::types::{Value,BasicValue,Path,Signature,Struct};
+use dbus_serialize::types::{Value,BasicValue,Path,Signature,Struct,Variant};
 
 pub trait Marshal {
     /// Encodes itself into buf, and returns the number of bytes written excluding leading padding
@@ -283,6 +283,20 @@ impl<K,V> Marshal for HashMap<K, V>
     }
 }
 
+impl Marshal for Variant {
+    fn dbus_encode(&self, buf: &mut Vec<u8>) -> usize {
+        let len = self.signature.dbus_encode(buf);
+        // We want to include any padding from the variant payload, so we can't just add the return
+        // value of the second dbus_encode
+        let old_len = buf.len();
+        self.object.dbus_encode(buf);
+        len + buf.len() - old_len
+    }
+    fn get_type(&self) -> String {
+        "v".to_string()
+    }
+}
+
 impl Marshal for BasicValue {
     fn dbus_encode(&self, buf: &mut Vec<u8>) -> usize {
         match self {
@@ -336,7 +350,7 @@ impl Marshal for Value {
             &Value::BasicValue(ref x) => x.get_type(),
             &Value::Double(_) => "d".to_string(),
             &Value::Array(ref x) => x.iter().next().unwrap().get_type(),
-            &Value::Variant(ref x) => x.get_type(),
+            &Value::Variant(_) => "v".to_string(),
             &Value::Struct(ref x) => x.get_type(),
             &Value::Dictionary(ref x) => {
                 let key_type = x.keys().next().unwrap().get_type();
@@ -386,4 +400,19 @@ fn test_array () {
     buf = Vec::new();
     array.dbus_encode(&mut buf);
     assert_eq!(buf, bytes);
+}
+
+#[test]
+fn test_variant () {
+    let v = Variant{
+        object: Box::new(Value::BasicValue(BasicValue::Uint32(42))),
+        signature: Signature("u".to_string())
+    };
+    assert_eq!(v.get_type(), "v");
+    let v_bytes = vec![1, 'u' as u8, 0, 0, 42, 0, 0, 0];
+
+    let mut buf = Vec::new();
+    let len = v.dbus_encode(&mut buf);
+    assert_eq!(len, 8);
+    assert_eq!(buf, v_bytes);
 }
