@@ -58,7 +58,9 @@ fn encode_header (msg_type: MessageType, serial: u32) -> Vec<u8> {
     buf
 }
 
-pub fn create_method_call (dest: &str, path: &str, iface: &str, method: &str) -> Vec<u8> {
+pub struct MessageBuf(pub Vec<u8>);
+
+pub fn create_method_call (dest: &str, path: &str, iface: &str, method: &str) -> MessageBuf {
     let mut msg = encode_header(MESSAGE_TYPE_METHOD_CALL, 0);
     let mut headers : Vec<HeaderField> = Vec::new();
     let mut v = Variant::new(Value::BasicValue(BasicValue::String(dest.to_string())), "s");
@@ -77,7 +79,14 @@ pub fn create_method_call (dest: &str, path: &str, iface: &str, method: &str) ->
     let mut lenbuf = Vec::new();
     len.dbus_encode(&mut lenbuf);
     set_length(&mut msg, &lenbuf);
-    msg
+    MessageBuf(msg)
+}
+
+impl MessageBuf {
+    pub fn add_arg(mut self, arg: &Marshal) -> MessageBuf {
+        arg.dbus_encode(&mut self.0);
+        self
+    }
 }
 
 const LEN_OFFSET : usize = 4;
@@ -114,4 +123,11 @@ pub struct Message {
 fn test_header () {
     let buf = encode_header(MESSAGE_TYPE_METHOD_CALL, 12);
     println!("{:?}", buf);
+}
+
+#[test]
+fn test_msg () {
+    create_method_call("foo", "bar", "baz", "floob")
+        .add_arg(&1)
+        .add_arg(&2);
 }

@@ -7,7 +7,7 @@ use std::ops::Deref;
 use dbus_serialize::types::{Value,BasicValue};
 
 use message;
-use message::{Message,HeaderFieldName};
+use message::{Message,HeaderFieldName,MessageBuf};
 use demarshal::{demarshal,DemarshalError};
 use marshal::Marshal;
 
@@ -76,7 +76,8 @@ impl Connection {
         Ok(conn)
     }
 
-    pub fn send(&mut self, msg: &mut [u8]) -> Result<(),Error> {
+    pub fn send(&mut self, mbuf: &mut MessageBuf) -> Result<(),Error> {
+        let mut msg = &mut mbuf.0;
         // A minimum header with no body is 16 bytes
         let mut len = msg.len() as u32;
         if len < 16 {
