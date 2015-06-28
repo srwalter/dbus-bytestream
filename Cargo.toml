@@ -8,3 +8,5 @@ git = "https://github.com/srwalter/dbus-serialize.git"
 
 [dependencies]
 unix_socket = "0.4.3"
+rustc-serialize = "0.3"
+libc = "0.1"

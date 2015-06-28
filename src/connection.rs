@@ -3,8 +3,10 @@ use std::collections::HashMap;
 use std::io;
 use std::io::{Read,Write};
 use std::ops::Deref;
+use libc;
 
 use unix_socket::UnixStream;
+use rustc_serialize::hex::ToHex;
 use dbus_serialize::types::{Value,BasicValue};
 
 use message;
@@ -111,12 +113,19 @@ impl Connection {
         let buf = vec![0];
         try!(sock.write_all(&buf));
 
-        // XXX: use real UID
-        try!(sock.write_all(b"AUTH EXTERNAL 31303030\r\n"));
+        let uid = unsafe {
+            libc::funcs::posix88::unistd::getuid()
+        };
+        let uid_str = uid.to_string();
+        let uid_hex = uid_str.into_bytes().to_hex();
+        let cmd = "AUTH EXTERNAL ".to_string() + &uid_hex + "\r\n";
+        try!(sock.write_all(&cmd.into_bytes()));
 
         // Read response
         let resp = try!(read_line(sock));
-        println!("{}", resp);
+        if !resp.starts_with("OK ") {
+            return Err(Error::AuthFailed);
+        }
 
         // Ready for action
         try!(sock.write_all(b"BEGIN\r\n"));
@@ -131,7 +140,8 @@ impl Connection {
         try!(self.send(&mut msg));
 
         // XXX: validate Hello reply
-        self.read_msg().unwrap();
+        let msg = self.read_msg().unwrap();
+        println!("{:?}", msg.body);
         Ok(())
     }
 
@@ -143,7 +153,7 @@ impl Connection {
             next_serial: 1
         };
 
-        try!(conn.auth_anonymous());
+        try!(conn.auth_external());
         try!(conn.say_hello());
         Ok(conn)
     }
@@ -282,12 +292,17 @@ impl Connection {
 
 #[test]
 fn test_connect () {
-    let mut conn = Connection::connect_uds("/home/swalter/dbus.sock").unwrap();
+    let mut conn = Connection::connect_uds("/var/run/dbus/system_bus_socket").unwrap();
     let mut msg = message::create_method_call("org.freedesktop.DBus", "/org/freedesktop/DBus",
                                           "org.freedesktop.DBus", "ListNames");
     conn.send(&mut msg).ok();
     let msg = conn.read_msg().unwrap();
     println!("{:?}", msg.body);
+}
+
+#[cfg(tcp)]
+#[test]
+fn test_tcp () {
     let mut conn = Connection::connect_tcp("localhost:12345").unwrap();
     let mut msg = message::create_method_call("org.freedesktop.DBus", "/org/freedesktop/DBus",
                                           "org.freedesktop.DBus", "ListNames");
