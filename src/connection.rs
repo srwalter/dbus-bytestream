@@ -28,7 +28,8 @@ pub enum Error {
     Disconnected,
     IOError(io::Error),
     DemarshalError(DemarshalError),
-    BadData
+    BadData,
+    AuthFailed,
 }
 
 impl From<io::Error> for Error {
@@ -52,6 +53,26 @@ fn read_exactly(sock: &mut StreamSocket, buf: &mut Vec<u8>, len: usize) -> Resul
     Ok(())
 }
 
+fn read_line(sock: &mut StreamSocket) -> Result<String,Error> {
+    let mut line = "".to_string();
+    let mut last = '\0';
+
+    loop {
+        let mut buf = vec![0];
+        match sock.read(&mut buf) {
+            Ok(x) if x > 0 => (),
+            _ => return Err(Error::Disconnected)
+        };
+        let chr = buf[0] as char;
+        line.push(chr);
+        if chr == '\n' && last == '\r' {
+            break;
+        }
+        last = chr;
+    }
+    Ok(line)
+}
+
 impl Connection {
     fn get_sock(&mut self) -> &mut StreamSocket {
         if self.tcp.is_some() {
@@ -69,12 +90,33 @@ impl Connection {
         // Authenticate to the daemon
         let buf = vec![0];
         try!(sock.write_all(&buf));
+
         try!(sock.write_all(b"AUTH ANONYMOUS 6c69626462757320312e382e3132\r\n"));
 
         // Read response
-        // XXX: do a proper line-oriented read...
-        let mut buf2 = vec![0; 128];
-        sock.read(&mut buf2).unwrap();
+        let resp = try!(read_line(sock));
+        if !resp.starts_with("OK ") {
+            return Err(Error::AuthFailed);
+        }
+
+        // Ready for action
+        try!(sock.write_all(b"BEGIN\r\n"));
+        Ok(())
+    }
+
+    fn auth_external(&mut self) -> Result<(),Error> {
+        let sock = self.get_sock();
+
+        // Authenticate to the daemon
+        let buf = vec![0];
+        try!(sock.write_all(&buf));
+
+        // XXX: use real UID
+        try!(sock.write_all(b"AUTH EXTERNAL 31303030\r\n"));
+
+        // Read response
+        let resp = try!(read_line(sock));
+        println!("{}", resp);
 
         // Ready for action
         try!(sock.write_all(b"BEGIN\r\n"));
@@ -240,7 +282,13 @@ impl Connection {
 
 #[test]
 fn test_connect () {
-    let mut conn = Connection::connect_tcp("localhost:12345").ok().unwrap();
+    let mut conn = Connection::connect_uds("/home/swalter/dbus.sock").unwrap();
+    let mut msg = message::create_method_call("org.freedesktop.DBus", "/org/freedesktop/DBus",
+                                          "org.freedesktop.DBus", "ListNames");
+    conn.send(&mut msg).ok();
+    let msg = conn.read_msg().unwrap();
+    println!("{:?}", msg.body);
+    let mut conn = Connection::connect_tcp("localhost:12345").unwrap();
     let mut msg = message::create_method_call("org.freedesktop.DBus", "/org/freedesktop/DBus",
                                           "org.freedesktop.DBus", "ListNames");
     conn.send(&mut msg).ok();
