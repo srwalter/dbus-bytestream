@@ -1,10 +1,11 @@
 use std::mem::transmute;
+use std::collections::HashMap;
 
 use dbus_serialize::types::{Path,Variant,Value,BasicValue,Signature};
 
 use marshal::{Marshal,pad_to_multiple};
 
-#[derive(Debug)]
+#[derive(Debug,Default)]
 pub struct MessageType(pub u8);
 pub const MESSAGE_TYPE_INVALID : MessageType        = MessageType(0);
 pub const MESSAGE_TYPE_METHOD_CALL : MessageType    = MessageType(1);
@@ -62,7 +63,7 @@ pub fn create_method_call (dest: &str, path: &str, iface: &str, method: &str) ->
     let mut headers : Vec<HeaderField> = Vec::new();
     let mut v = Variant::new(Value::BasicValue(BasicValue::String(dest.to_string())), "s");
     headers.push(HeaderField(HeaderFieldName::Destination, v));
-    v = Variant::new(Value::BasicValue(BasicValue::String(path.to_string())), "s");
+    v = Variant::new(Value::BasicValue(BasicValue::ObjectPath(Path(path.to_string()))), "o");
     headers.push(HeaderField(HeaderFieldName::Path, v));
     v = Variant::new(Value::BasicValue(BasicValue::String(iface.to_string())), "s");
     headers.push(HeaderField(HeaderFieldName::Interface, v));
@@ -96,6 +97,17 @@ pub fn get_length (msg: &[u8]) -> u32 {
     let len : u32 = unsafe { transmute(lenbuf) };
     // len is already LE, so this is a no-op except on BE systems
     len.to_le()
+}
+
+#[derive(Debug,Default)]
+pub struct Message {
+    pub big_endian: bool,
+    pub message_type: MessageType,
+    pub flags: u8,
+    pub version: u8,
+    pub serial: u32,
+    pub headers: HashMap<u8,Value>,
+    pub body: Vec<u8>
 }
 
 #[test]
