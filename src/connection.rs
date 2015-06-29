@@ -20,9 +20,13 @@ trait StreamSocket : Read + Write { }
 impl StreamSocket for TcpStream { }
 impl StreamSocket for UnixStream { }
 
+enum Socket {
+    Tcp(TcpStream),
+    Uds(UnixStream)
+}
+
 pub struct Connection {
-    tcp: Option<TcpStream>,
-    uds: Option<UnixStream>,
+    sock: Socket,
     next_serial: u32
 }
 
@@ -78,13 +82,10 @@ fn read_line(sock: &mut StreamSocket) -> Result<String,Error> {
 
 impl Connection {
     fn get_sock(&mut self) -> &mut StreamSocket {
-        if self.tcp.is_some() {
-            return self.tcp.as_mut().unwrap();
+        match self.sock {
+            Socket::Tcp(ref mut x) => x,
+            Socket::Uds(ref mut x) => x
         }
-        if self.uds.is_some() {
-            return self.uds.as_mut().unwrap();
-        }
-        panic!("No transport!");
     }
 
     fn auth_anonymous(&mut self) -> Result<(),Error> {
@@ -149,8 +150,7 @@ impl Connection {
     pub fn connect_uds(addr: &str) -> Result<Connection,Error> {
         let sock = try!(UnixStream::connect(addr));
         let mut conn = Connection {
-            uds: Some(sock),
-            tcp: None,
+            sock: Socket::Uds(sock),
             next_serial: 1
         };
 
@@ -162,8 +162,7 @@ impl Connection {
     pub fn connect_tcp(addr: &str) -> Result<Connection,Error> {
         let sock = try!(TcpStream::connect(addr));
         let mut conn = Connection {
-            tcp: Some(sock),
-            uds: None,
+            sock: Socket::Tcp(sock),
             next_serial: 1
         };
 
