@@ -16,9 +16,7 @@ use demarshal::{demarshal,DemarshalError};
 use marshal::Marshal;
 
 trait StreamSocket : Read + Write { }
-
-impl StreamSocket for TcpStream { }
-impl StreamSocket for UnixStream { }
+impl<T: Read + Write> StreamSocket for T {}
 
 enum Socket {
     Tcp(TcpStream),
