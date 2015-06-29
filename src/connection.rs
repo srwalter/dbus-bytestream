@@ -323,6 +323,7 @@ impl Connection {
     }
 }
 
+#[cfg(dbus)]
 #[test]
 fn test_connect () {
     let mut conn = Connection::connect_uds("/var/run/dbus/system_bus_socket").unwrap();
@@ -332,7 +333,7 @@ fn test_connect () {
     println!("ListNames: {:?}", resp);
 }
 
-#[cfg(tcp)]
+#[cfg(dbus)]
 #[test]
 fn test_tcp () {
     let mut conn = Connection::connect_tcp("localhost:12345").unwrap();
