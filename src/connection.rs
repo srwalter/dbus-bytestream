@@ -89,12 +89,16 @@ impl Connection {
         }
     }
 
-    fn auth_anonymous(&mut self) -> Result<(),Error> {
+    fn send_nul_byte(&mut self) -> Result<(),Error> {
+        // Send NUL byte
         let sock = self.get_sock();
-
-        // Authenticate to the daemon
         let buf = vec![0];
         try!(sock.write_all(&buf));
+        Ok(())
+    }
+
+    fn auth_anonymous(&mut self) -> Result<(),Error> {
+        let sock = self.get_sock();
 
         try!(sock.write_all(b"AUTH ANONYMOUS 6c69626462757320312e382e3132\r\n"));
 
@@ -111,10 +115,6 @@ impl Connection {
 
     fn auth_external(&mut self) -> Result<(),Error> {
         let sock = self.get_sock();
-
-        // Authenticate to the daemon
-        let buf = vec![0];
-        try!(sock.write_all(&buf));
 
         let uid = unsafe {
             libc::funcs::posix88::unistd::getuid()
@@ -154,6 +154,7 @@ impl Connection {
             next_serial: 1
         };
 
+        try!(conn.send_nul_byte());
         try!(conn.auth_external());
         try!(conn.say_hello());
         Ok(conn)
@@ -167,6 +168,7 @@ impl Connection {
             next_serial: 1
         };
 
+        try!(conn.send_nul_byte());
         try!(conn.auth_anonymous());
         try!(conn.say_hello());
         Ok(conn)
