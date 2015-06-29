@@ -27,7 +27,8 @@ enum Socket {
 
 pub struct Connection {
     sock: Socket,
-    next_serial: u32
+    next_serial: u32,
+    queue: Vec<Message>,
 }
 
 #[derive(Debug)]
@@ -139,11 +140,8 @@ impl Connection {
                                                   "/org/freedesktop/DBus",
                                                   "org.freedesktop.DBus",
                                                   "Hello");
-        try!(self.send(&mut msg));
-
+        try!(self.call_sync(&mut msg));
         // XXX: validate Hello reply
-        let msg = self.read_msg().unwrap();
-        println!("{:?}", msg.body);
         Ok(())
     }
 
@@ -151,6 +149,7 @@ impl Connection {
         let sock = try!(UnixStream::connect(addr));
         let mut conn = Connection {
             sock: Socket::Uds(sock),
+            queue: Vec::new(),
             next_serial: 1
         };
 
@@ -163,6 +162,7 @@ impl Connection {
         let sock = try!(TcpStream::connect(addr));
         let mut conn = Connection {
             sock: Socket::Tcp(sock),
+            queue: Vec::new(),
             next_serial: 1
         };
 
@@ -171,7 +171,7 @@ impl Connection {
         Ok(conn)
     }
 
-    pub fn send(&mut self, mbuf: &mut MessageBuf) -> Result<(),Error> {
+    pub fn send(&mut self, mbuf: &mut MessageBuf) -> Result<u32, Error> {
         let mut msg = &mut mbuf.0;
         // A minimum header with no body is 16 bytes
         let mut len = msg.len() as u32;
@@ -186,16 +186,46 @@ impl Connection {
         let mut buf = Vec::new();
         len.dbus_encode(&mut buf);
         // Update the message with a correct serial number, as well
-        self.next_serial.dbus_encode(&mut buf);
+        let this_serial = self.next_serial;
         self.next_serial += 1;
+        this_serial.dbus_encode(&mut buf);
         message::set_length(msg, &buf);
 
         let sock = self.get_sock();
         try!(sock.write_all(msg));
-        Ok(())
+        Ok(this_serial)
+    }
+
+    pub fn call_sync(&mut self, mbuf: &mut MessageBuf) -> Result<Vec<Value>,Error> {
+        // XXX: assert that this is a method call with reply
+        let serial = try!(self.send(mbuf));
+        // We need a local queue so that read_msg doesn't just give us
+        // the same one over and over
+        let mut queue = Vec::new();
+        loop {
+            let msg = try!(self.read_msg());
+            match msg.headers.get(&(HeaderFieldName::ReplySerial as u8)) {
+                Some(&Value::Variant(ref x)) => {
+                    let reply_serial : u32 = DBusDecoder::decode(x.object.deref().clone()).unwrap();
+                    if reply_serial == serial {
+                        // Move our queued messages into the Connection's queue
+                        for _ in 0..queue.len() {
+                            self.queue.push(queue.remove(0));
+                        }
+                        return Ok(msg.body);
+                    }
+                }
+                _ => ()
+            };
+            queue.push(msg);
+        }
     }
 
     pub fn read_msg(&mut self) -> Result<Message,Error> {
+        match self.queue.get(0) {
+            Some(_) => return Ok(self.queue.remove(0)),
+            _ => ()
+        };
         let mut buf = Vec::new();
         let sock = self.get_sock();
 
@@ -294,9 +324,8 @@ fn test_connect () {
     let mut conn = Connection::connect_uds("/var/run/dbus/system_bus_socket").unwrap();
     let mut msg = message::create_method_call("org.freedesktop.DBus", "/org/freedesktop/DBus",
                                           "org.freedesktop.DBus", "ListNames");
-    conn.send(&mut msg).ok();
-    let msg = conn.read_msg().unwrap();
-    println!("{:?}", msg.body);
+    let resp = conn.call_sync(&mut msg).unwrap();
+    println!("ListNames: {:?}", resp);
 }
 
 #[cfg(tcp)]
