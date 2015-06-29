@@ -203,10 +203,11 @@ impl Connection {
         // the same one over and over
         let mut queue = Vec::new();
         loop {
-            let msg = try!(self.read_msg());
-            match msg.headers.get(&(HeaderFieldName::ReplySerial as u8)) {
-                Some(&Value::Variant(ref x)) => {
-                    let reply_serial : u32 = DBusDecoder::decode(x.object.deref().clone()).unwrap();
+            let mut msg = try!(self.read_msg());
+            match msg.headers.remove(&(HeaderFieldName::ReplySerial as u8)) {
+                Some(Value::Variant(x)) => {
+                    let obj : Value = *x.object;
+                    let reply_serial : u32 = DBusDecoder::decode(obj).unwrap();
                     if reply_serial == serial {
                         // Move our queued messages into the Connection's queue
                         for _ in 0..queue.len() {
