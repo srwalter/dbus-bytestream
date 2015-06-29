@@ -169,6 +169,10 @@ impl Connection {
         Ok(conn)
     }
 
+    pub fn connect_system() -> Result<Connection, Error> {
+        Connection::connect_uds("/var/run/dbus/system_bus_socket")
+    }
+
     pub fn send(&mut self, mbuf: &mut MessageBuf) -> Result<u32, Error> {
         let mut msg = &mut mbuf.0;
         // A minimum header with no body is 16 bytes
@@ -318,13 +322,24 @@ impl Connection {
     }
 }
 
-#[test]
-fn test_connect() {
-    let mut conn = Connection::connect_uds("/var/run/dbus/system_bus_socket").unwrap();
+#[cfg(test)]
+fn validate_connection(conn: &mut Connection) {
     let mut msg = message::create_method_call("org.freedesktop.DBus", "/org/freedesktop/DBus",
                                           "org.freedesktop.DBus", "ListNames");
     let resp = conn.call_sync(&mut msg).unwrap();
     println!("ListNames: {:?}", resp);
+}
+
+#[test]
+fn test_connect() {
+    let mut conn = Connection::connect_uds("/var/run/dbus/system_bus_socket").unwrap();
+    validate_connection(&mut conn);
+}
+
+#[test]
+fn test_connect_system() {
+    let mut conn = Connection::connect_system().unwrap();
+    validate_connection(&mut conn);
 }
 
 #[cfg(tcp)]
