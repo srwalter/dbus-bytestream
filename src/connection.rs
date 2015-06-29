@@ -319,7 +319,7 @@ impl Connection {
 }
 
 #[test]
-fn test_connect () {
+fn test_connect() {
     let mut conn = Connection::connect_uds("/var/run/dbus/system_bus_socket").unwrap();
     let mut msg = message::create_method_call("org.freedesktop.DBus", "/org/freedesktop/DBus",
                                           "org.freedesktop.DBus", "ListNames");
@@ -329,7 +329,7 @@ fn test_connect () {
 
 #[cfg(tcp)]
 #[test]
-fn test_tcp () {
+fn test_tcp() {
     let mut conn = Connection::connect_tcp("localhost:12345").unwrap();
     let mut msg = message::create_method_call("org.freedesktop.DBus", "/org/freedesktop/DBus",
                                           "org.freedesktop.DBus", "ListNames");
