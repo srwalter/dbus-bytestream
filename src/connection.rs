@@ -135,14 +135,15 @@ impl Connection {
         Ok(())
     }
 
-    fn say_hello(&mut self) -> Result<(),Error> {
+    fn say_hello(&mut self) -> Result<(String),Error> {
         let mut msg = message::create_method_call("org.freedesktop.DBus",
                                                   "/org/freedesktop/DBus",
                                                   "org.freedesktop.DBus",
                                                   "Hello");
-        try!(self.call_sync(&mut msg));
-        // XXX: validate Hello reply
-        Ok(())
+        match try!(self.call_sync(&mut msg)).get(0) {
+            Some(&Value::BasicValue(BasicValue::String(ref x))) => Ok(x.to_string()),
+            _ => Err(Error::BadData)
+        }
     }
 
     pub fn connect_uds(addr: &str) -> Result<Connection,Error> {
