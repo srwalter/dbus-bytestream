@@ -8,6 +8,7 @@ use libc;
 use unix_socket::UnixStream;
 use rustc_serialize::hex::ToHex;
 use dbus_serialize::types::{Value,BasicValue};
+use dbus_serialize::decoder::DBusDecoder;
 
 use message;
 use message::{Message,HeaderFieldName,MessageBuf};
@@ -198,7 +199,6 @@ impl Connection {
     pub fn read_msg(&mut self) -> Result<Message,Error> {
         let mut buf = Vec::new();
         let sock = self.get_sock();
-        sock.take(4);
 
         // Read and demarshal the fixed portion of the header
         try!(read_exactly(sock, &mut buf, 12));
@@ -209,17 +209,17 @@ impl Connection {
             x => panic!("Demarshal didn't return what we asked for: {:?}", x)
         };
 
-        let v = header.objects;
+        let mut v = header.objects;
         let mut msg : Message = Default::default();
-        let endian = u8::from(&v[0]);
+        let endian : u8 = DBusDecoder::decode(v.remove(0)).unwrap();
         if endian == 'B' as u8 {
             msg.big_endian = true;
         }
-        msg.message_type = message::MessageType(u8::from(&v[1]));
-        msg.flags = u8::from(&v[2]);
-        msg.version = u8::from(&v[3]);
-        let body_len = u32::from(&v[4]);
-        msg.serial = u32::from(&v[5]);
+        msg.message_type = message::MessageType(DBusDecoder::decode(v.remove(0)).unwrap());
+        msg.flags = DBusDecoder::decode::<u8>(v.remove(0)).unwrap();
+        msg.version = DBusDecoder::decode::<u8>(v.remove(0)).unwrap();
+        let body_len = DBusDecoder::decode::<u32>(v.remove(0)).unwrap();
+        msg.serial = DBusDecoder::decode::<u32>(v.remove(0)).unwrap();
 
         // Read array length
         try!(read_exactly(sock, &mut buf, 4));
@@ -228,7 +228,7 @@ impl Connection {
         offset = 12;
         sig = "u".to_string();
         let data = demarshal(&mut buf, &mut offset, &mut sig).ok().unwrap();
-        let arr_len = u32::from(&data) as usize;
+        let arr_len = DBusDecoder::decode::<u32>(data).unwrap() as usize;
 
         // Make buf_copy big enough for the entire array, and fill it
         buf_copy.reserve(arr_len);
@@ -244,13 +244,13 @@ impl Connection {
         };
 
         msg.headers = HashMap::new();
-        for i in header_fields {
+        for i in header_fields.objects {
             let mut st = match i {
                 Value::Struct(x) => x,
                 x => panic!("Demarshal didn't return what we asked for: {:?}", x)
             };
             let val = st.objects.remove(1);
-            let code = u8::from(&st.objects[0]);
+            let code = DBusDecoder::decode::<u8>(st.objects.remove(0)).unwrap();
             msg.headers.insert(code, val);
         }
 

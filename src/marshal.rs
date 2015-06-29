@@ -315,19 +315,7 @@ impl Marshal for BasicValue {
     }
 
     fn get_type(&self) -> String {
-        match self {
-            &BasicValue::Byte(_) => "y".to_string(),
-            &BasicValue::Boolean(_) => "b".to_string(),
-            &BasicValue::Int16(_) => "n".to_string(),
-            &BasicValue::Uint16(_) => "q".to_string(),
-            &BasicValue::Int32(_) => "i".to_string(),
-            &BasicValue::Uint32(_) => "u".to_string(),
-            &BasicValue::Int64(_) => "x".to_string(),
-            &BasicValue::Uint64(_) => "t".to_string(),
-            &BasicValue::String(_) => "s".to_string(),
-            &BasicValue::ObjectPath(_) => "o".to_string(),
-            &BasicValue::Signature(_) => "g".to_string(),
-        }
+        self.get_signature().to_string()
     }
 }
 
@@ -338,26 +326,15 @@ impl Marshal for Value {
         match self {
             &Value::BasicValue(ref x) => x.dbus_encode(buf),
             &Value::Double(ref x) => x.dbus_encode(buf),
-            &Value::Array(ref x) => x.dbus_encode(buf),
+            &Value::Array(ref x) => x.objects.dbus_encode(buf),
             &Value::Variant(ref x) => x.dbus_encode(buf),
             &Value::Struct(ref x) => x.dbus_encode(buf),
-            &Value::Dictionary(ref x) => x.dbus_encode(buf)
+            &Value::Dictionary(ref x) => x.map.dbus_encode(buf)
         }
     }
 
     fn get_type(&self) -> String {
-        match self {
-            &Value::BasicValue(ref x) => x.get_type(),
-            &Value::Double(_) => "d".to_string(),
-            &Value::Array(ref x) => x.iter().next().unwrap().get_type(),
-            &Value::Variant(_) => "v".to_string(),
-            &Value::Struct(ref x) => x.get_type(),
-            &Value::Dictionary(ref x) => {
-                let key_type = x.keys().next().unwrap().get_type();
-                let val_type = x.values().next().unwrap().get_type();
-                "a{".to_string() + &key_type + &val_type + "}"
-            }
-        }
+        self.get_signature().to_string()
     }
 }
 

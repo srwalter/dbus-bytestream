@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::mem::transmute;
 
-use dbus_serialize::types::{Value,BasicValue,Path,Signature,Struct,Variant};
+use dbus_serialize::types::{Value,BasicValue,Path,Signature,Struct,Variant,Array,Dictionary};
 
 #[derive(Debug)]
 pub enum DemarshalError {
@@ -177,6 +177,9 @@ fn demarshal_array(buf: &mut Vec<u8>, offset: &mut usize, sig: &mut String) -> R
         vec.push(try!(demarshal(buf, offset, &mut sig_copy)));
     }
     // Now that we're done with our elements we can forget the elements consumed by demarshal
+    let mut mysig = sig.clone();
+    mysig.truncate(sig.len() - sig_copy.len());
+    mysig.insert(0, 'a');
     *sig = sig_copy;
 
     if is_dict {
@@ -193,10 +196,10 @@ fn demarshal_array(buf: &mut Vec<u8>, offset: &mut usize, sig: &mut String) -> R
             };
             map.insert(key.clone(), val);
         }
-        return Ok(Value::Dictionary(map));
+        return Ok(Value::Dictionary(Dictionary::new_with_sig(map, mysig)));
     }
 
-    Ok(Value::Array(vec))
+    Ok(Value::Array(Array::new_with_sig(vec, mysig)))
 }
 
 fn demarshal_struct(buf: &mut Vec<u8>, offset: &mut usize, sig: &mut String) -> Result<Value,DemarshalError> {
@@ -335,7 +338,7 @@ mod test {
             Value::BasicValue(BasicValue::Uint32(2)),
             Value::BasicValue(BasicValue::Uint32(3)),
         ];
-        assert_eq!(arr, golden);
+        assert_eq!(arr.objects, golden);
         assert_eq!(buf.len(), 0);
         assert_eq!(sig, "");
     }
@@ -358,7 +361,7 @@ mod test {
             Value::BasicValue(BasicValue::Byte(2)),
             Value::BasicValue(BasicValue::Byte(3)),
         ];
-        assert_eq!(arr, golden);
+        assert_eq!(arr.objects, golden);
         assert_eq!(buf.len(), 0);
         assert_eq!(sig, "");
     }
