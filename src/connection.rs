@@ -1,3 +1,22 @@
+//! Deals with creating and using connections to dbus-daemon.  The primary
+//! type of interest is the Connection struct
+//! 
+//! # Examples
+//! ```
+//! use dbus_bytestream::connection::Connection;
+//! use dbus_bytestream::message;
+//!
+//! let mut conn = Connection::connect_system().unwrap();
+//! let mut msg = message::create_method_call(
+//!     "org.freedesktop.DBus", // destination
+//!     "/org/freedesktop/DBus", // path
+//!     "org.freedesktop.DBus", //interface
+//!     "ListNames" // method
+//! );
+//! let reply = conn.call_sync(&mut msg);
+//! println!("{:?}", reply);
+//! ```
+
 use std::net::TcpStream;
 use std::collections::HashMap;
 use std::io;
@@ -144,6 +163,9 @@ impl Connection {
         }
     }
 
+    /// Create a Connection object using a UNIX domain socket as the transport.  The addr is the
+    /// path to connect to.  Abstract paths can be used by passing a NUL byte as the first byte of
+    /// addr.
     pub fn connect_uds(addr: &str) -> Result<Connection,Error> {
         let sock = try!(UnixStream::connect(addr));
         let mut conn = Connection {
@@ -158,6 +180,8 @@ impl Connection {
         Ok(conn)
     }
 
+    /// Create a Connection object using a TCP socket as the transport.  The addr is the host and
+    /// port to connect to.
     pub fn connect_tcp(addr: &str) -> Result<Connection,Error> {
         let sock = try!(TcpStream::connect(addr));
         let mut conn = Connection {
@@ -172,10 +196,14 @@ impl Connection {
         Ok(conn)
     }
 
+    /// Connect to the D-Bus system bus
     pub fn connect_system() -> Result<Connection, Error> {
         Connection::connect_uds("/var/run/dbus/system_bus_socket")
     }
 
+    /// Send a message over the connection.  The MessageBuf can be created by one of the functions
+    /// from the message module, such as message::create_method_call .  On success, returns the
+    /// serial number of the outgoing message so that the reply can be identified.
     pub fn send(&mut self, mbuf: &mut MessageBuf) -> Result<u32, Error> {
         let mut msg = &mut mbuf.0;
         // A minimum header with no body is 16 bytes
@@ -201,6 +229,13 @@ impl Connection {
         Ok(this_serial)
     }
 
+    /// Send a message over a connection and block until a reply is received.  This is only valid
+    /// for method calls.  Returns the sequence of Value objects that is the body of the method
+    /// return.
+    ///
+    /// # Panics
+    /// Calling this function with a MessageBuf for other than METHOD_CALL or with the
+    /// NO_REPLY_EXPECTED flag set is a programming error and will panic.
     pub fn call_sync(&mut self, mbuf: &mut MessageBuf) -> Result<Vec<Value>,Error> {
         // XXX: assert that this is a method call with reply
         let serial = try!(self.send(mbuf));
@@ -227,6 +262,7 @@ impl Connection {
         }
     }
 
+    /// Block until a message comes in from the message bus.  The received message is returned.
     pub fn read_msg(&mut self) -> Result<Message,Error> {
         match self.queue.get(0) {
             Some(_) => return Ok(self.queue.remove(0)),

@@ -1,3 +1,4 @@
+//! Functions for creating and modifying messages to send across the message bus.
 use std::mem::transmute;
 use std::collections::HashMap;
 
@@ -58,8 +59,11 @@ fn encode_header (msg_type: MessageType, serial: u32) -> Vec<u8> {
     buf
 }
 
+/// Container for the header of a D-Bus message.  Arguments can be added with add_arg()
 pub struct MessageBuf(pub Vec<u8>);
 
+/// Create a MessageBuf for a D-Bus method call.  Once a MessageBuf object is created, arguments
+/// can be added to the object with MessageBuf.add_arg
 pub fn create_method_call (dest: &str, path: &str, iface: &str, method: &str) -> MessageBuf {
     let mut msg = encode_header(MESSAGE_TYPE_METHOD_CALL, 0);
     let mut headers : Vec<HeaderField> = Vec::new();
@@ -83,6 +87,18 @@ pub fn create_method_call (dest: &str, path: &str, iface: &str, method: &str) ->
 }
 
 impl MessageBuf {
+    /// Add the given argument to the MessageBuf.  Accepts anything that implements the Marshal
+    /// trait, which is most basic types, as well as the general-purpose
+    /// dbus_serialize::types::Value enum.
+    ///
+    /// Note that these calls can be chained together to add multiple arguments, see the example
+    ///
+    /// # Examples
+    /// ```
+    /// dbus_bytestream::message::create_method_call("foo", "/bar", "baz", "bloop")
+    ///     .add_arg(&1)
+    ///     .add_arg(&"string");
+    /// ```
     pub fn add_arg(mut self, arg: &Marshal) -> MessageBuf {
         arg.dbus_encode(&mut self.0);
         self
@@ -108,6 +124,7 @@ pub fn get_length (msg: &[u8]) -> u32 {
     len.to_le()
 }
 
+/// Represents a received message from the message bus
 #[derive(Debug,Default)]
 pub struct Message {
     pub big_endian: bool,
