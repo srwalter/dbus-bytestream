@@ -67,13 +67,13 @@ pub struct MessageBuf(pub Vec<u8>);
 pub fn create_method_call (dest: &str, path: &str, iface: &str, method: &str) -> MessageBuf {
     let mut msg = encode_header(MESSAGE_TYPE_METHOD_CALL, 0);
     let mut headers : Vec<HeaderField> = Vec::new();
-    let mut v = Variant::new(Value::BasicValue(BasicValue::String(dest.to_string())), "s");
+    let mut v = Variant::new(Value::from(dest), "s");
     headers.push(HeaderField(HeaderFieldName::Destination, v));
     v = Variant::new(Value::BasicValue(BasicValue::ObjectPath(Path(path.to_string()))), "o");
     headers.push(HeaderField(HeaderFieldName::Path, v));
-    v = Variant::new(Value::BasicValue(BasicValue::String(iface.to_string())), "s");
+    v = Variant::new(Value::from(iface), "s");
     headers.push(HeaderField(HeaderFieldName::Interface, v));
-    v = Variant::new(Value::BasicValue(BasicValue::String(method.to_string())), "s");
+    v = Variant::new(Value::from(method), "s");
     headers.push(HeaderField(HeaderFieldName::Member, v));
     headers.dbus_encode(&mut msg);
     pad_to_multiple(&mut msg, 8);
