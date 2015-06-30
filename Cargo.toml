@@ -1,5 +1,8 @@
 [package]
 name = "dbus-bytestream"
+license = "LGPL-2.1"
+description = "Native D-Bus implementation"
+repository = "https://github.com/srwalter/dbus-bytestream.git"
 version = "0.1.0"
 authors = ["Steven Walter <stevenrwalter@gmail.com>"]
 
