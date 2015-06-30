@@ -4,7 +4,7 @@ license = "LGPL-2.1"
 description = "Native D-Bus implementation"
 repository = "https://github.com/srwalter/dbus-bytestream.git"
 documentation = "http://srwalter.github.io/dbus-bytestream/doc/dbus_bytestream/connection/index.html"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Steven Walter <stevenrwalter@gmail.com>"]
 
 [dependencies]
