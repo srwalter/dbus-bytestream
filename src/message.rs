@@ -86,6 +86,23 @@ pub fn create_method_call (dest: &str, path: &str, iface: &str, method: &str) ->
     MessageBuf(msg)
 }
 
+/// Create a MessageBuf for a D-Bus method return.  Once created, return values can be added to the
+/// object with MessageBuf.add_arg
+pub fn create_method_return(reply_serial: u32) -> MessageBuf {
+    let mut msg = encode_header(MESSAGE_TYPE_METHOD_RETURN, 0);
+    let mut headers : Vec<HeaderField> = Vec::new();
+    let v = Variant::new(Value::from(reply_serial), "u");
+    headers.push(HeaderField(HeaderFieldName::ReplySerial, v));
+    pad_to_multiple(&mut msg, 8);
+
+    // Store the length of the header so we can easily compute body length later
+    let len = msg.len() as u32;
+    let mut lenbuf = Vec::new();
+    len.dbus_encode(&mut lenbuf);
+    set_length(&mut msg, &lenbuf);
+    MessageBuf(msg)
+}
+
 impl MessageBuf {
     /// Add the given argument to the MessageBuf.  Accepts anything that implements the Marshal
     /// trait, which is most basic types, as well as the general-purpose
