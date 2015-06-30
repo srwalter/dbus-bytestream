@@ -6,10 +6,8 @@ repository = "https://github.com/srwalter/dbus-bytestream.git"
 version = "0.1.0"
 authors = ["Steven Walter <stevenrwalter@gmail.com>"]
 
-[dependencies.dbus-serialize]
-git = "https://github.com/srwalter/dbus-serialize.git"
-
 [dependencies]
 unix_socket = "0.4.3"
 rustc-serialize = "0.3"
 libc = "0.1"
+dbus-serialize = "0.1"
