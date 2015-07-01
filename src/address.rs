@@ -1,7 +1,10 @@
+use std::io;
+use std::net::{SocketAddr, ToSocketAddrs};
 use std::path::{Path, PathBuf};
 use std::string;
 use std::str::FromStr;
 use std::str::Split;
+use std::vec;
 
 use rustc_serialize::hex::{FromHex,FromHexError};
 
@@ -163,9 +166,66 @@ impl FromStr for UnixAddress {
     }
 }
 
+/// A DBus Tcp address
+#[derive(Debug)]
+pub struct TcpAddress {
+    host: String,
+    port: String,
+}
+
+impl ToSocketAddrs for TcpAddress {
+    type Iter = vec::IntoIter<SocketAddr>;
+    /// Returns the Tcp path
+    fn to_socket_addrs(&self) -> io::Result<Self::Iter> {
+        (self.host.clone() + ":" + &self.port).to_socket_addrs()
+    }
+}
+
+impl FromStr for TcpAddress {
+    type Err = ServerAddressError;
+
+    /// Constructs a TcpAddress from a key=value option string
+    fn from_str(opts: &str) -> Result<Self, ServerAddressError> {
+        let mut host = None;
+        let mut port = None;
+        for kv in AddrKeyVals::new(opts) {
+            let kv = try!(kv);
+
+            match kv.0.as_ref() {
+                "host" => {
+                    if host.is_none() {
+                        host = Some(kv.1);
+                    } else {
+                        return Err((Error::ConflictingOptions,
+                                    "Duplicate host specified".to_string()));
+                    }
+                },
+                "port" => {
+                    if port.is_none() {
+                        port = Some(kv.1);
+                    } else {
+                        return Err((Error::ConflictingOptions,
+                                    "Duplicate port specified".to_string()));
+                    }
+                },
+                "guid" => {}, // Ignore for now
+                _ => return Err((Error::UnknownOption, kv.0))
+            }
+        }
+        if host == None {
+            Err((Error::MissingOption, "No host for tcp socket".to_string()))
+        } else if port == None {
+            Err((Error::MissingOption, "No port for tcp socket".to_string()))
+        } else {
+            Ok(TcpAddress { host: host.unwrap(), port: port.unwrap() })
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum ServerAddress {
     Unix(UnixAddress),
+    Tcp(TcpAddress),
 }
 
 impl FromStr for ServerAddress {
@@ -182,6 +242,7 @@ impl FromStr for ServerAddress {
 
         match transport {
             "unix" => Ok(ServerAddress::Unix(try!(UnixAddress::from_str(opts)))),
+            "tcp" => Ok(ServerAddress::Tcp(try!(TcpAddress::from_str(opts)))),
             _ => Err((Error::UnknownTransport, transport.to_string())),
         }
     }

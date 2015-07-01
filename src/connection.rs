@@ -18,7 +18,7 @@
 //! ```
 
 use std::env;
-use std::net::TcpStream;
+use std::net::{TcpStream,ToSocketAddrs};
 use std::collections::HashMap;
 use std::io;
 use std::io::{Read,Write};
@@ -179,6 +179,7 @@ impl Connection {
     fn connect_addr(addr: ServerAddress) -> Result<Connection,Error> {
         match addr {
             ServerAddress::Unix(unix) => Self::connect_uds(unix.path()),
+            ServerAddress::Tcp(tcp) => Self::connect_tcp(tcp),
         }
     }
 
@@ -230,7 +231,7 @@ impl Connection {
 
     /// Creates a Connection object using a TCP socket as the transport.  The addr is the host and
     /// port to connect to.
-    pub fn connect_tcp(addr: &str) -> Result<Connection,Error> {
+    pub fn connect_tcp<T: ToSocketAddrs>(addr: T) -> Result<Connection,Error> {
         let sock = try!(TcpStream::connect(addr));
         let mut conn = Connection {
             sock: Socket::Tcp(sock),
