@@ -114,6 +114,42 @@ pub fn create_method_return(reply_serial: u32) -> Message {
                  Variant::new(Value::from(reply_serial), "u"))
 }
 
+/// Create a Message for a D-Bus error.  Once created, return values can be added
+/// with Message.add_arg
+pub fn create_error(error_name: &str, reply_serial: u32) -> Message {
+    Message {
+        big_endian: false,
+        message_type: MESSAGE_TYPE_ERROR,
+        flags: 0,
+        version: 1,
+        serial: 0,
+        headers: Vec::new(),
+        body: Vec::new(),
+    }.add_header(HEADER_FIELD_REPLY_SERIAL,
+                 Variant::new(Value::from(reply_serial), "u"))
+     .add_header(HEADER_FIELD_ERROR_NAME,
+                 Variant::new(Value::from(error_name), "s"))
+}
+
+/// Create a Message for a D-Bus signal.  Once created, return values can be added
+/// with Message.add_arg
+pub fn create_signal(path: &str, interface: &str, member: &str) -> Message {
+    Message {
+        big_endian: false,
+        message_type: MESSAGE_TYPE_SIGNAL,
+        flags: 0,
+        version: 1,
+        serial: 0,
+        headers: Vec::new(),
+        body: Vec::new(),
+    }.add_header(HEADER_FIELD_PATH,
+                 Variant::new(Value::BasicValue(BasicValue::ObjectPath(Path(path.to_string()))), "o"))
+     .add_header(HEADER_FIELD_INTERFACE,
+                 Variant::new(Value::from(interface), "s"))
+     .add_header(HEADER_FIELD_MEMBER,
+                 Variant::new(Value::from(member), "s"))
+}
+
 impl Message {
     /// Add the given argument to the Message.  Accepts anything that implements the Marshal
     /// trait, which is most basic types, as well as the general-purpose
