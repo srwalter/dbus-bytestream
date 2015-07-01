@@ -17,11 +17,14 @@
 //! println!("{:?}", reply);
 //! ```
 
+use std::env;
 use std::net::TcpStream;
 use std::collections::HashMap;
 use std::io;
 use std::io::{Read,Write};
 use std::ops::Deref;
+use std::path::Path;
+use std::str::FromStr;
 use libc;
 
 use unix_socket::UnixStream;
@@ -29,6 +32,8 @@ use rustc_serialize::hex::ToHex;
 use dbus_serialize::types::{Value,BasicValue};
 use dbus_serialize::decoder::DBusDecoder;
 
+use address;
+use address::ServerAddress;
 use message;
 use message::{Message,HeaderFieldName,MessageBuf};
 use demarshal::{demarshal,DemarshalError};
@@ -53,8 +58,10 @@ pub enum Error {
     Disconnected,
     IOError(io::Error),
     DemarshalError(DemarshalError),
+    AddressError(address::ServerAddressError),
     BadData,
     AuthFailed,
+    NoEnvironment,
 }
 
 impl From<io::Error> for Error {
@@ -66,6 +73,12 @@ impl From<io::Error> for Error {
 impl From<DemarshalError> for Error {
     fn from(x: DemarshalError) -> Self {
         Error::DemarshalError(x)
+    }
+}
+
+impl From<address::ServerAddressError> for Error {
+    fn from(x: address::ServerAddressError) -> Self {
+        Error::AddressError(x)
     }
 }
 
@@ -163,10 +176,45 @@ impl Connection {
         }
     }
 
-    /// Create a Connection object using a UNIX domain socket as the transport.  The addr is the
+    fn connect_addr(addr: ServerAddress) -> Result<Connection,Error> {
+        match addr {
+            ServerAddress::Unix(unix) => Self::connect_uds(unix.path()),
+        }
+    }
+
+    /// Connects to a DBus address string.
+    pub fn connect(addr: &str) -> Result<Connection, Error> {
+        Self::connect_addr(try!(ServerAddress::from_str(addr)))
+    }
+
+    /// Connects to the system bus.
+    ///
+    /// The address is specified by the environment variable
+    /// DBUS_SYSTEM_BUS_ADDRESS or "unix:path=/var/run/dbus/system_bus_socket" if unset.
+    pub fn connect_system() -> Result<Connection, Error> {
+        let default = "unix:path=/var/run/dbus/system_bus_socket";
+        if let Ok(e) = env::var("DBUS_SYSTEM_BUS_ADDRESS") {
+            Self::connect(&e)
+        } else {
+            Self::connect(default)
+        }
+    }
+
+    /// Connects to the session bus.
+    ///
+    /// The address is specified by the environment variable DBUS_SESSION_BUS_ADDRESS.
+    pub fn connect_session() -> Result<Connection, Error> {
+        if let Ok(e) = env::var("DBUS_SESSION_BUS_ADDRESS") {
+            Self::connect(&e)
+        } else {
+            Err(Error::NoEnvironment)
+        }
+    }
+
+    /// Creates a Connection object using a UNIX domain socket as the transport.  The addr is the
     /// path to connect to.  Abstract paths can be used by passing a NUL byte as the first byte of
     /// addr.
-    pub fn connect_uds(addr: &str) -> Result<Connection,Error> {
+    pub fn connect_uds<P: AsRef<Path>>(addr: P) -> Result<Connection,Error> {
         let sock = try!(UnixStream::connect(addr));
         let mut conn = Connection {
             sock: Socket::Uds(sock),
@@ -180,7 +228,7 @@ impl Connection {
         Ok(conn)
     }
 
-    /// Create a Connection object using a TCP socket as the transport.  The addr is the host and
+    /// Creates a Connection object using a TCP socket as the transport.  The addr is the host and
     /// port to connect to.
     pub fn connect_tcp(addr: &str) -> Result<Connection,Error> {
         let sock = try!(TcpStream::connect(addr));
@@ -196,12 +244,7 @@ impl Connection {
         Ok(conn)
     }
 
-    /// Connect to the D-Bus system bus
-    pub fn connect_system() -> Result<Connection, Error> {
-        Connection::connect_uds("/var/run/dbus/system_bus_socket")
-    }
-
-    /// Send a message over the connection.  The MessageBuf can be created by one of the functions
+    /// Sends a message over the connection.  The MessageBuf can be created by one of the functions
     /// from the message module, such as message::create_method_call .  On success, returns the
     /// serial number of the outgoing message so that the reply can be identified.
     pub fn send(&mut self, mbuf: &mut MessageBuf) -> Result<u32, Error> {
@@ -229,7 +272,7 @@ impl Connection {
         Ok(this_serial)
     }
 
-    /// Send a message over a connection and block until a reply is received.  This is only valid
+    /// Sends a message over a connection and block until a reply is received.  This is only valid
     /// for method calls.  Returns the sequence of Value objects that is the body of the method
     /// return.
     ///
@@ -262,7 +305,7 @@ impl Connection {
         }
     }
 
-    /// Block until a message comes in from the message bus.  The received message is returned.
+    /// Blocks until a message comes in from the message bus.  The received message is returned.
     pub fn read_msg(&mut self) -> Result<Message,Error> {
         match self.queue.get(0) {
             Some(_) => return Ok(self.queue.remove(0)),
@@ -361,6 +404,7 @@ impl Connection {
     }
 }
 
+#[cfg(dbus)]
 #[cfg(test)]
 fn validate_connection(conn: &mut Connection) {
     let mut msg = message::create_method_call("org.freedesktop.DBus", "/org/freedesktop/DBus",
@@ -380,6 +424,13 @@ fn test_connect() {
 #[test]
 fn test_connect_system() {
     let mut conn = Connection::connect_system().unwrap();
+    validate_connection(&mut conn);
+}
+
+#[cfg(dbus)]
+#[test]
+fn test_connect_session() {
+    let mut conn = Connection::connect_session().unwrap();
     validate_connection(&mut conn);
 }
 

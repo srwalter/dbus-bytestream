@@ -10,3 +10,10 @@ pub mod demarshal;
 pub mod marshal;
 pub mod message;
 pub mod connection;
+
+mod address;
+pub mod addr {
+    pub use address::UnescapeError;
+    pub use address::Error as AddressError;
+    pub use address::ServerAddressError;
+}
