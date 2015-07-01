@@ -405,7 +405,6 @@ impl Connection {
     }
 }
 
-#[cfg(dbus)]
 #[cfg(test)]
 fn validate_connection(conn: &mut Connection) {
     let mut msg = message::create_method_call("org.freedesktop.DBus", "/org/freedesktop/DBus",
@@ -414,31 +413,21 @@ fn validate_connection(conn: &mut Connection) {
     println!("ListNames: {:?}", resp);
 }
 
-#[cfg(dbus)]
-#[test]
-fn test_connect() {
-    let mut conn = Connection::connect_uds("/var/run/dbus/system_bus_socket").unwrap();
-    validate_connection(&mut conn);
-}
-
-#[cfg(dbus)]
 #[test]
 fn test_connect_system() {
     let mut conn = Connection::connect_system().unwrap();
     validate_connection(&mut conn);
 }
 
-#[cfg(dbus)]
 #[test]
 fn test_connect_session() {
     let mut conn = Connection::connect_session().unwrap();
     validate_connection(&mut conn);
 }
 
-#[cfg(dbus)]
 #[test]
 fn test_tcp() {
-    let mut conn = Connection::connect_tcp("localhost:12345").unwrap();
+    let mut conn = Connection::connect(&env::var("DBUS_TCP_BUS_ADDRESS").unwrap()).unwrap();
     let mut msg = message::create_method_call("org.freedesktop.DBus", "/org/freedesktop/DBus",
                                           "org.freedesktop.DBus", "ListNames");
     conn.send(&mut msg).ok();
