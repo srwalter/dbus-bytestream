@@ -18,7 +18,7 @@
 //! ```
 
 use std::env;
-use std::net::TcpStream;
+use std::net::{TcpStream,ToSocketAddrs};
 use std::collections::HashMap;
 use std::io;
 use std::io::{Read,Write};
@@ -179,6 +179,7 @@ impl Connection {
     fn connect_addr(addr: ServerAddress) -> Result<Connection,Error> {
         match addr {
             ServerAddress::Unix(unix) => Self::connect_uds(unix.path()),
+            ServerAddress::Tcp(tcp) => Self::connect_tcp(tcp),
         }
     }
 
@@ -230,7 +231,7 @@ impl Connection {
 
     /// Creates a Connection object using a TCP socket as the transport.  The addr is the host and
     /// port to connect to.
-    pub fn connect_tcp(addr: &str) -> Result<Connection,Error> {
+    pub fn connect_tcp<T: ToSocketAddrs>(addr: T) -> Result<Connection,Error> {
         let sock = try!(TcpStream::connect(addr));
         let mut conn = Connection {
             sock: Socket::Tcp(sock),
@@ -404,7 +405,6 @@ impl Connection {
     }
 }
 
-#[cfg(dbus)]
 #[cfg(test)]
 fn validate_connection(conn: &mut Connection) {
     let mut msg = message::create_method_call("org.freedesktop.DBus", "/org/freedesktop/DBus",
@@ -413,31 +413,21 @@ fn validate_connection(conn: &mut Connection) {
     println!("ListNames: {:?}", resp);
 }
 
-#[cfg(dbus)]
-#[test]
-fn test_connect() {
-    let mut conn = Connection::connect_uds("/var/run/dbus/system_bus_socket").unwrap();
-    validate_connection(&mut conn);
-}
-
-#[cfg(dbus)]
 #[test]
 fn test_connect_system() {
     let mut conn = Connection::connect_system().unwrap();
     validate_connection(&mut conn);
 }
 
-#[cfg(dbus)]
 #[test]
 fn test_connect_session() {
     let mut conn = Connection::connect_session().unwrap();
     validate_connection(&mut conn);
 }
 
-#[cfg(dbus)]
 #[test]
 fn test_tcp() {
-    let mut conn = Connection::connect_tcp("localhost:12345").unwrap();
+    let mut conn = Connection::connect(&env::var("DBUS_TCP_BUS_ADDRESS").unwrap()).unwrap();
     let mut msg = message::create_method_call("org.freedesktop.DBus", "/org/freedesktop/DBus",
                                           "org.freedesktop.DBus", "ListNames");
     conn.send(&mut msg).ok();

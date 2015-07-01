@@ -1,5 +1,5 @@
 language: rust
 rust:
-- stable
-script:
-- cargo test
+    - stable
+    - nightly
+script: ./test/test.sh
