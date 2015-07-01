@@ -211,7 +211,7 @@ impl Connection {
         }
     }
 
-    /// Create a Connection object using a UNIX domain socket as the transport.  The addr is the
+    /// Creates a Connection object using a UNIX domain socket as the transport.  The addr is the
     /// path to connect to.  Abstract paths can be used by passing a NUL byte as the first byte of
     /// addr.
     pub fn connect_uds<P: AsRef<Path>>(addr: P) -> Result<Connection,Error> {
@@ -228,7 +228,7 @@ impl Connection {
         Ok(conn)
     }
 
-    /// Create a Connection object using a TCP socket as the transport.  The addr is the host and
+    /// Creates a Connection object using a TCP socket as the transport.  The addr is the host and
     /// port to connect to.
     pub fn connect_tcp(addr: &str) -> Result<Connection,Error> {
         let sock = try!(TcpStream::connect(addr));
@@ -244,7 +244,7 @@ impl Connection {
         Ok(conn)
     }
 
-    /// Send a message over the connection.  The MessageBuf can be created by one of the functions
+    /// Sends a message over the connection.  The MessageBuf can be created by one of the functions
     /// from the message module, such as message::create_method_call .  On success, returns the
     /// serial number of the outgoing message so that the reply can be identified.
     pub fn send(&mut self, mbuf: &mut MessageBuf) -> Result<u32, Error> {
@@ -272,7 +272,7 @@ impl Connection {
         Ok(this_serial)
     }
 
-    /// Send a message over a connection and block until a reply is received.  This is only valid
+    /// Sends a message over a connection and block until a reply is received.  This is only valid
     /// for method calls.  Returns the sequence of Value objects that is the body of the method
     /// return.
     ///
@@ -305,7 +305,7 @@ impl Connection {
         }
     }
 
-    /// Block until a message comes in from the message bus.  The received message is returned.
+    /// Blocks until a message comes in from the message bus.  The received message is returned.
     pub fn read_msg(&mut self) -> Result<Message,Error> {
         match self.queue.get(0) {
             Some(_) => return Ok(self.queue.remove(0)),
