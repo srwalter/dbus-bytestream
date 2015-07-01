@@ -396,6 +396,15 @@ fn test_connect_system() {
 fn test_connect_session() {
     let mut conn = Connection::connect_session().unwrap();
     validate_connection(&mut conn);
+    let mut msg = message::create_method_call("org.freedesktop.DBus", "/org/freedesktop/DBus",
+                                              "org.freedesktop.DBus", "RequestName");
+    msg = msg.add_arg(&"com.test.foobar")
+             .add_arg(&(0 as u32));
+    println!("{:?}", msg);
+    let mut resp = conn.call_sync(&mut msg).unwrap().unwrap();
+    println!("RequestName: {:?}", resp);
+    let value = resp.remove(0);
+    assert_eq!(value, Value::from(1 as u32));
 }
 
 #[test]

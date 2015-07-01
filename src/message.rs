@@ -1,4 +1,6 @@
 //! Functions for creating and modifying messages to send across the message bus.
+use std::ops::DerefMut;
+
 use dbus_serialize::types::{Path,Variant,Value,BasicValue,Signature};
 
 use marshal::{Marshal,pad_to_multiple};
@@ -126,8 +128,31 @@ impl Message {
     ///     .add_arg(&"string");
     /// ```
     pub fn add_arg(mut self, arg: &Marshal) -> Message {
+        match self.get_header(HEADER_FIELD_SIGNATURE) {
+            None => {
+                let value = Value::BasicValue(BasicValue::Signature(Signature("".to_string())));
+                let variant = Variant::new(value, "g");
+                self = self.add_header(HEADER_FIELD_SIGNATURE, variant);
+            },
+            _ => ()
+        };
+        {
+            let b : &mut Box<Value> = &mut self.get_header(HEADER_FIELD_SIGNATURE).unwrap().object;
+            let val : &mut Value = b.deref_mut();
+            match val {
+                &mut Value::BasicValue(BasicValue::Signature(ref mut s)) => s.0.push_str(&arg.get_type()),
+                _ => panic!("Garbage in signature field")
+            };
+        }
         arg.dbus_encode(&mut self.body);
         self
+    }
+
+    pub fn get_header(&mut self, name: u8) -> Option<&mut Variant> {
+        match self.headers.iter().position(|x| { x.0 == name }) {
+            Some(idx) => Some(&mut self.headers[idx].1),
+            _ => None
+        }
     }
 
     pub fn add_header(mut self, name: u8, val: Variant) -> Message {
