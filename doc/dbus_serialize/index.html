@@ -43,25 +43,31 @@
     <section id='main' class="content mod">
 <h1 class='fqn'><span class='in-band'>Crate <a class='mod' href=''>dbus_serialize</a><wbr></span><span class='out-of-band'><a href='stability.html'>[stability]</a> <span id='render-detail'>
             <a id="collapse-all" href="#">[-]</a>&nbsp;<a id="expand-all" href="#">[+]</a>
-        </span><a id='src-0' href='../src/dbus_serialize/lib.rs.html#1-5'>[src]</a></span></h1>
-<h2 id='modules' class='section-header'><a href="#modules">Modules</a></h2>
+        </span><a id='src-0' href='../src/dbus_serialize/lib.rs.html#1-8'>[src]</a></span></h1>
+<div class='docblock'><p>Central to this crate is the Value enum.  Value can be used to express any valid D-Bus data
+structure (and some invalid ones).  Additionally, rustc_serialize can be used to convert from
+standard rust data types to Value, and vice-versa.</p>
+</div><h2 id='modules' class='section-header'><a href="#modules">Modules</a></h2>
 <table>
                     <tr>
                         <td><a class='stability Unmarked' title='No stability level'></a><a class='mod' href='decoder/index.html'
                                title='dbus_serialize::decoder'>decoder</a></td>
-                        <td class='docblock short'></td>
+                        <td class='docblock short'><p>Implements the rustc_serialize::Decoder trait</p>
+</td>
                     </tr>
                 
                     <tr>
                         <td><a class='stability Unmarked' title='No stability level'></a><a class='mod' href='encoder/index.html'
                                title='dbus_serialize::encoder'>encoder</a></td>
-                        <td class='docblock short'></td>
+                        <td class='docblock short'><p>Implements the rustc_serialize::Encoder trait</p>
+</td>
                     </tr>
                 
                     <tr>
                         <td><a class='stability Unmarked' title='No stability level'></a><a class='mod' href='types/index.html'
                                title='dbus_serialize::types'>types</a></td>
-                        <td class='docblock short'></td>
+                        <td class='docblock short'><p>Contains the Value and BasicValue enums, as well as traits and helper types for them</p>
+</td>
                     </tr>
                 </table></section>
     <section id='search' class="content hidden"></section>

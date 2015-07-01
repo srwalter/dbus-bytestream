@@ -52,6 +52,13 @@
 <span id="10">10</span>
 <span id="11">11</span>
 <span id="12">12</span>
+<span id="13">13</span>
+<span id="14">14</span>
+<span id="15">15</span>
+<span id="16">16</span>
+<span id="17">17</span>
+<span id="18">18</span>
+<span id="19">19</span>
 </pre><pre class='rust '>
 <span class='doccomment'>//! Native rust implementation of the D-Bus wire protocol.  Supports TCP and UDS transports, as</span>
 <span class='doccomment'>//! well as the EXTERNAL and ANONYMOUS authentication types.</span>
@@ -65,6 +72,13 @@
 <span class='kw'>pub</span> <span class='kw'>mod</span> <span class='ident'>marshal</span>;
 <span class='kw'>pub</span> <span class='kw'>mod</span> <span class='ident'>message</span>;
 <span class='kw'>pub</span> <span class='kw'>mod</span> <span class='ident'>connection</span>;
+
+<span class='kw'>mod</span> <span class='ident'>address</span>;
+<span class='kw'>pub</span> <span class='kw'>mod</span> <span class='ident'>addr</span> {
+    <span class='kw'>pub</span> <span class='kw'>use</span> <span class='ident'>address</span>::<span class='ident'>UnescapeError</span>;
+    <span class='kw'>pub</span> <span class='kw'>use</span> <span class='ident'>address</span>::<span class='ident'>Error</span> <span class='kw'>as</span> <span class='ident'>AddressError</span>;
+    <span class='kw'>pub</span> <span class='kw'>use</span> <span class='ident'>address</span>::<span class='ident'>ServerAddressError</span>;
+}
 </pre>
 </section>
     <section id='search' class="content hidden"></section>

@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="generator" content="rustdoc">
-    <meta name="description" content="Source to the Rust file `/home/srwalter/.cargo/registry/src/github.com-1ecc6299db9ec823/dbus-serialize-0.1.0/src/lib.rs`.">
+    <meta name="description" content="Source to the Rust file `/home/srwalter/programs/dbus-serialize/src/lib.rs`.">
     <meta name="keywords" content="rust, rustlang, rust-lang">
 
     <title>lib.rs.html -- source</title>
@@ -45,7 +45,13 @@
 <span id="3">3</span>
 <span id="4">4</span>
 <span id="5">5</span>
+<span id="6">6</span>
+<span id="7">7</span>
+<span id="8">8</span>
 </pre><pre class='rust '>
+<span class='doccomment'>//! Central to this crate is the Value enum.  Value can be used to express any valid D-Bus data</span>
+<span class='doccomment'>//! structure (and some invalid ones).  Additionally, rustc_serialize can be used to convert from</span>
+<span class='doccomment'>//! standard rust data types to Value, and vice-versa.</span>
 <span class='kw'>extern</span> <span class='kw'>crate</span> <span class='ident'>rustc_serialize</span>;
 
 <span class='kw'>pub</span> <span class='kw'>mod</span> <span class='ident'>types</span>;

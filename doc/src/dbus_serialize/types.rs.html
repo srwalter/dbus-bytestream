@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="generator" content="rustdoc">
-    <meta name="description" content="Source to the Rust file `/home/srwalter/.cargo/registry/src/github.com-1ecc6299db9ec823/dbus-serialize-0.1.0/src/types.rs`.">
+    <meta name="description" content="Source to the Rust file `/home/srwalter/programs/dbus-serialize/src/types.rs`.">
     <meta name="keywords" content="rust, rustlang, rust-lang">
 
     <title>types.rs.html -- source</title>
@@ -188,9 +188,40 @@
 <span id="146">146</span>
 <span id="147">147</span>
 <span id="148">148</span>
+<span id="149">149</span>
+<span id="150">150</span>
+<span id="151">151</span>
+<span id="152">152</span>
+<span id="153">153</span>
+<span id="154">154</span>
+<span id="155">155</span>
+<span id="156">156</span>
+<span id="157">157</span>
+<span id="158">158</span>
+<span id="159">159</span>
+<span id="160">160</span>
+<span id="161">161</span>
+<span id="162">162</span>
+<span id="163">163</span>
+<span id="164">164</span>
+<span id="165">165</span>
+<span id="166">166</span>
+<span id="167">167</span>
+<span id="168">168</span>
+<span id="169">169</span>
+<span id="170">170</span>
+<span id="171">171</span>
+<span id="172">172</span>
+<span id="173">173</span>
+<span id="174">174</span>
+<span id="175">175</span>
+<span id="176">176</span>
 </pre><pre class='rust '>
+<span class='doccomment'>//! Contains the Value and BasicValue enums, as well as traits and helper types for them</span>
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>collections</span>::<span class='ident'>HashMap</span>;
 
+<span class='doccomment'>/// BasicValue covers the &quot;basic&quot; D-Bus types, that is those that are allowed to be used as keys in</span>
+<span class='doccomment'>/// a dictionary.</span>
 <span class='attribute'>#[<span class='ident'>derive</span>(<span class='ident'>PartialEq</span>,<span class='ident'>Eq</span>,<span class='ident'>Debug</span>,<span class='ident'>Hash</span>,<span class='ident'>Clone</span>)]</span>
 <span class='kw'>pub</span> <span class='kw'>enum</span> <span class='ident'>BasicValue</span> {
     <span class='ident'>Byte</span>(<span class='ident'>u8</span>),
@@ -213,6 +244,7 @@
 <span class='kw'>pub</span> <span class='kw'>struct</span> <span class='ident'>Signature</span>(<span class='kw'>pub</span> <span class='ident'>String</span>);
 
 <span class='kw'>impl</span> <span class='ident'>BasicValue</span> {
+    <span class='doccomment'>/// Returns the D-Bus type signature that corresponds to the Value</span>
     <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>get_signature</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='kw-2'>&amp;</span><span class='ident'>str</span> {
         <span class='kw'>match</span> <span class='self'>self</span> {
             <span class='kw-2'>&amp;</span><span class='ident'>BasicValue</span>::<span class='ident'>Byte</span>(_) <span class='op'>=&gt;</span> <span class='string'>&quot;y&quot;</span>,
@@ -230,6 +262,7 @@
     }
 }
 
+<span class='doccomment'>/// A Struct is an ordered sequence of Value objects, which may be of different varieties</span>
 <span class='attribute'>#[<span class='ident'>derive</span>(<span class='ident'>PartialEq</span>,<span class='ident'>Debug</span>,<span class='ident'>Clone</span>)]</span>
 <span class='kw'>pub</span> <span class='kw'>struct</span> <span class='ident'>Struct</span> {
     <span class='kw'>pub</span> <span class='ident'>objects</span>: <span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>Value</span><span class='op'>&gt;</span>,
@@ -251,6 +284,8 @@
     }
 }
 
+<span class='doccomment'>/// An Array is an ordered sequence of Value objects which must all be of the same variety.  That</span>
+<span class='doccomment'>/// is, it is not value to have a Uint8 and a Uint32 as elements of the same Array.</span>
 <span class='attribute'>#[<span class='ident'>derive</span>(<span class='ident'>Clone</span>,<span class='ident'>Debug</span>,<span class='ident'>PartialEq</span>)]</span>
 <span class='kw'>pub</span> <span class='kw'>struct</span> <span class='ident'>Array</span> {
     <span class='kw'>pub</span> <span class='ident'>objects</span>: <span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>Value</span><span class='op'>&gt;</span>,
@@ -258,10 +293,12 @@
 }
 
 <span class='kw'>impl</span> <span class='ident'>Array</span> {
-    <span class='comment'>// This function can only be used if it is never possible for the</span>
-    <span class='comment'>// input vector to be empty.  If it is empty, this function will</span>
-    <span class='comment'>// panic.  The reason is that it is impossible to determine the type</span>
-    <span class='comment'>// signature for an empty vector.  Use new_with_sig instead.</span>
+    <span class='doccomment'>/// Create a new array from the given vector of Value.  This function may only be used when it</span>
+    <span class='doccomment'>/// is never possible for the input vector to be empty.  The reason is that it is impossible to</span>
+    <span class='doccomment'>/// determine the type signature for an empty vector.  Use new_with_sig instead.</span>
+    <span class='doccomment'>///</span>
+    <span class='doccomment'>/// # Panics</span>
+    <span class='doccomment'>/// If objects.len() is 0, this function will panic.</span>
     <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>new</span>(<span class='ident'>objects</span>: <span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>Value</span><span class='op'>&gt;</span>) <span class='op'>-&gt;</span> <span class='ident'>Array</span> {
         <span class='kw'>let</span> <span class='ident'>sig</span> <span class='op'>=</span> <span class='ident'>objects</span>.<span class='ident'>iter</span>().<span class='ident'>next</span>().<span class='ident'>unwrap</span>().<span class='ident'>get_signature</span>().<span class='ident'>to_string</span>();
         <span class='ident'>Array</span> {
@@ -270,6 +307,8 @@
         }
     }
 
+    <span class='doccomment'>/// Create a new array from the given vector of Value.  If objects is non-empty, then sig must</span>
+    <span class='doccomment'>/// match the type of the contents.</span>
     <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>new_with_sig</span>(<span class='ident'>objects</span>: <span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>Value</span><span class='op'>&gt;</span>, <span class='ident'>sig</span>: <span class='ident'>String</span>) <span class='op'>-&gt;</span> <span class='ident'>Array</span> {
         <span class='ident'>Array</span> {
             <span class='ident'>objects</span>: <span class='ident'>objects</span>,
@@ -285,10 +324,12 @@
 }
 
 <span class='kw'>impl</span> <span class='ident'>Dictionary</span> {
-    <span class='comment'>// This function can only be used if it is never possible for the</span>
-    <span class='comment'>// input map to be empty.  If it is empty, this function will</span>
-    <span class='comment'>// panic.  The reason is that it is impossible to determine the type</span>
-    <span class='comment'>// signature for an empty map.  Use new_with_sig instead.</span>
+    <span class='doccomment'>/// Create a new Dictionary from the given map.  This function may only be used when it</span>
+    <span class='doccomment'>/// is never possible for the input map to be empty.  The reason is that it is impossible to</span>
+    <span class='doccomment'>/// determine the type signature for an empty vector.  Use new_with_sig instead.</span>
+    <span class='doccomment'>///</span>
+    <span class='doccomment'>/// # Panics</span>
+    <span class='doccomment'>/// If map.len() is 0, this function will panic.</span>
     <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>new</span>(<span class='ident'>map</span>: <span class='ident'>HashMap</span><span class='op'>&lt;</span><span class='ident'>BasicValue</span>,<span class='ident'>Value</span><span class='op'>&gt;</span>) <span class='op'>-&gt;</span> <span class='ident'>Dictionary</span> {
         <span class='kw'>let</span> <span class='ident'>key_type</span> <span class='op'>=</span> <span class='ident'>map</span>.<span class='ident'>keys</span>().<span class='ident'>next</span>().<span class='ident'>unwrap</span>().<span class='ident'>get_signature</span>().<span class='ident'>to_string</span>();
         <span class='kw'>let</span> <span class='ident'>val_type</span> <span class='op'>=</span> <span class='ident'>map</span>.<span class='ident'>values</span>().<span class='ident'>next</span>().<span class='ident'>unwrap</span>().<span class='ident'>get_signature</span>().<span class='ident'>to_string</span>();
@@ -299,6 +340,8 @@
         }
     }
 
+    <span class='doccomment'>/// Create a new Dictionary from the given map.  If map is non-empty, then sig must</span>
+    <span class='doccomment'>/// match the type of the contents.</span>
     <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>new_with_sig</span>(<span class='ident'>map</span>: <span class='ident'>HashMap</span><span class='op'>&lt;</span><span class='ident'>BasicValue</span>,<span class='ident'>Value</span><span class='op'>&gt;</span>, <span class='ident'>sig</span>: <span class='ident'>String</span>) <span class='op'>-&gt;</span> <span class='ident'>Dictionary</span> {
         <span class='ident'>Dictionary</span> {
             <span class='ident'>map</span>: <span class='ident'>map</span>,
@@ -307,6 +350,18 @@
     }
 }
 
+<span class='doccomment'>/// Root type for any D-Bus value</span>
+<span class='doccomment'>///</span>
+<span class='doccomment'>/// # Examples</span>
+<span class='doccomment'>/// ```</span>
+<span class='doccomment'>/// use dbus_serialize::types::Value;</span>
+<span class='doccomment'>/// use dbus_serialize::decoder::DBusDecoder;</span>
+<span class='doccomment'>///</span>
+<span class='doccomment'>/// Value::from(5);</span>
+<span class='doccomment'>/// Value::from(&quot;foobar&quot;);</span>
+<span class='doccomment'>/// let val = Value::Double(1.2);</span>
+<span class='doccomment'>/// let d : f64 = DBusDecoder::decode(val).unwrap();</span>
+<span class='doccomment'>/// ```</span>
 <span class='attribute'>#[<span class='ident'>derive</span>(<span class='ident'>PartialEq</span>,<span class='ident'>Debug</span>,<span class='ident'>Clone</span>)]</span>
 <span class='kw'>pub</span> <span class='kw'>enum</span> <span class='ident'>Value</span> {
     <span class='ident'>BasicValue</span>(<span class='ident'>BasicValue</span>),
@@ -318,6 +373,7 @@
 }
 
 <span class='kw'>impl</span> <span class='ident'>Value</span> {
+    <span class='doccomment'>/// Returns the D-Bus type signature that corresponds to the Value</span>
     <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>get_signature</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='kw-2'>&amp;</span><span class='ident'>str</span> {
         <span class='kw'>match</span> <span class='self'>self</span> {
             <span class='kw-2'>&amp;</span><span class='ident'>Value</span>::<span class='ident'>BasicValue</span>(<span class='kw-2'>ref</span> <span class='ident'>x</span>) <span class='op'>=&gt;</span> <span class='ident'>x</span>.<span class='ident'>get_signature</span>(),

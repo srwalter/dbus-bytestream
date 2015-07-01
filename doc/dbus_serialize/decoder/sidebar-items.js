@@ -1,1 +1,1 @@
-initSidebarItems({"struct":[["DBusDecoder",""]],"enum":[["DecodeError",""]]});
+initSidebarItems({"enum":[["DecodeError",""]],"struct":[["DBusDecoder",""]]});

@@ -1,1 +1,1 @@
-initSidebarItems({"trait":[["BasicMarshal",""],["Marshal",""]],"fn":[["pad_to_multiple",""]]});
+initSidebarItems({"fn":[["pad_to_multiple",""]],"trait":[["BasicMarshal",""],["Marshal",""]]});

@@ -1,1 +1,1 @@
-initSidebarItems({"mod":[["connection","Deals with creating and using connections to dbus-daemon.  The primary type of interest is the Connection struct"],["demarshal",""],["marshal",""],["message","Functions for creating and modifying messages to send across the message bus."]]});
+initSidebarItems({"mod":[["addr",""],["connection","Deals with creating and using connections to dbus-daemon.  The primary type of interest is the Connection struct"],["demarshal",""],["marshal",""],["message","Functions for creating and modifying messages to send across the message bus."]]});
