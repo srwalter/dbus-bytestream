@@ -19,7 +19,6 @@
 
 use std::env;
 use std::net::{TcpStream,ToSocketAddrs};
-use std::collections::HashMap;
 use std::io;
 use std::io::{Read,Write};
 use std::ops::Deref;
@@ -29,13 +28,13 @@ use libc;
 
 use unix_socket::UnixStream;
 use rustc_serialize::hex::ToHex;
-use dbus_serialize::types::{Value,BasicValue};
+use dbus_serialize::types::Value;
 use dbus_serialize::decoder::DBusDecoder;
 
 use address;
 use address::ServerAddress;
 use message;
-use message::{Message,HeaderFieldName,MessageBuf};
+use message::{Message,HeaderField};
 use demarshal::{demarshal,DemarshalError};
 use marshal::Marshal;
 
@@ -165,15 +164,13 @@ impl Connection {
         Ok(())
     }
 
-    fn say_hello(&mut self) -> Result<(String),Error> {
+    fn say_hello(&mut self) -> Result<(),Error> {
         let mut msg = message::create_method_call("org.freedesktop.DBus",
                                                   "/org/freedesktop/DBus",
                                                   "org.freedesktop.DBus",
                                                   "Hello");
-        match try!(self.call_sync(&mut msg)).get(0) {
-            Some(&Value::BasicValue(BasicValue::String(ref x))) => Ok(x.to_string()),
-            _ => Err(Error::BadData)
-        }
+        try!(self.call_sync(&mut msg));
+        Ok(())
     }
 
     fn connect_addr(addr: ServerAddress) -> Result<Connection,Error> {
@@ -245,31 +242,20 @@ impl Connection {
         Ok(conn)
     }
 
-    /// Sends a message over the connection.  The MessageBuf can be created by one of the functions
+    /// Sends a message over the connection.  The Message can be created by one of the functions
     /// from the message module, such as message::create_method_call .  On success, returns the
     /// serial number of the outgoing message so that the reply can be identified.
-    pub fn send(&mut self, mbuf: &mut MessageBuf) -> Result<u32, Error> {
-        let mut msg = &mut mbuf.0;
-        // A minimum header with no body is 16 bytes
-        let mut len = msg.len() as u32;
-        if len < 16 {
-            return Err(Error::BadData);
-        }
-
-        // Get the current length from the message, which only include the length of the header.
-        // That field should actually be the length of only the body, so update that now
-        let old_len = message::get_length(msg);
-        len -= old_len;
-        let mut buf = Vec::new();
-        len.dbus_encode(&mut buf);
-        // Update the message with a correct serial number, as well
+    pub fn send(&mut self, mbuf: &mut Message) -> Result<u32, Error> {
         let this_serial = self.next_serial;
         self.next_serial += 1;
-        this_serial.dbus_encode(&mut buf);
-        message::set_length(msg, &buf);
+        mbuf.serial = this_serial;
+
+        let mut msg = Vec::new();
+        mbuf.dbus_encode(&mut msg);
 
         let sock = self.get_sock();
-        try!(sock.write_all(msg));
+        try!(sock.write_all(&msg));
+        try!(sock.write_all(&mbuf.body));
         Ok(this_serial)
     }
 
@@ -278,27 +264,31 @@ impl Connection {
     /// return.
     ///
     /// # Panics
-    /// Calling this function with a MessageBuf for other than METHOD_CALL or with the
+    /// Calling this function with a Message for other than METHOD_CALL or with the
     /// NO_REPLY_EXPECTED flag set is a programming error and will panic.
-    pub fn call_sync(&mut self, mbuf: &mut MessageBuf) -> Result<Vec<Value>,Error> {
-        // XXX: assert that this is a method call with reply
+    pub fn call_sync(&mut self, mbuf: &mut Message) -> Result<Option<Vec<Value>>,Error> {
+        assert_eq!(mbuf.message_type, message::MESSAGE_TYPE_METHOD_CALL);
+        assert_eq!(mbuf.flags & message::FLAGS_NO_REPLY_EXPECTED, 0);
         let serial = try!(self.send(mbuf));
         // We need a local queue so that read_msg doesn't just give us
         // the same one over and over
         let mut queue = Vec::new();
         loop {
             let mut msg = try!(self.read_msg());
-            match msg.headers.remove(&(HeaderFieldName::ReplySerial as u8)) {
-                Some(Value::Variant(x)) => {
-                    let obj : Value = *x.object;
+            match msg.headers.iter().position(|x| { x.0 == message::HEADER_FIELD_REPLY_SERIAL }) {
+                Some(idx) => {
+                    let obj = {
+                        let x = &msg.headers[idx].1;
+                        x.object.deref().clone()
+                    };
                     let reply_serial : u32 = DBusDecoder::decode(obj).unwrap();
                     if reply_serial == serial {
                         // Move our queued messages into the Connection's queue
                         for _ in 0..queue.len() {
                             self.queue.push(queue.remove(0));
                         }
-                        return Ok(msg.body);
-                    }
+                        return Ok(try!(msg.get_body()))
+                    };
                 }
                 _ => ()
             };
@@ -358,7 +348,7 @@ impl Connection {
             x => panic!("Demarshal didn't return what we asked for: {:?}", x)
         };
 
-        msg.headers = HashMap::new();
+        msg.headers = Vec::new();
         for i in header_fields.objects {
             let mut st = match i {
                 Value::Struct(x) => x,
@@ -366,7 +356,11 @@ impl Connection {
             };
             let val = st.objects.remove(1);
             let code = DBusDecoder::decode::<u8>(st.objects.remove(0)).unwrap();
-            msg.headers.insert(code, val);
+            let variant = match val {
+                Value::Variant(x) => x,
+                x => panic!("Demarshal didn't return what we asked for: {:?}", x)
+            };
+            msg.headers.push(HeaderField(code, variant));
         }
 
         // Read the padding, if any
@@ -377,28 +371,7 @@ impl Connection {
 
         // Finally, read the entire body
         if body_len > 0 {
-            let v = match msg.headers.get(&(HeaderFieldName::Signature as u8)) {
-                Some(&Value::Variant(ref x)) => x,
-                _ => return Err(Error::DemarshalError(DemarshalError::BadSignature))
-            };
-
-            let sigval = match v.object.deref() {
-                &Value::BasicValue(BasicValue::Signature(ref x)) => x,
-                _ => return Err(Error::DemarshalError(DemarshalError::BadSignature))
-            };
-
-            let mut body = Vec::new();
-            try!(read_exactly(sock, &mut body, body_len as usize));
-
-            let mut sig = "(".to_string() + &sigval.0 + ")";
-            offset = 0;
-            let objs = match try!(demarshal(&mut body, &mut offset, &mut sig)) {
-                Value::Struct(x) => x.objects,
-                x => panic!("Didn't get a struct: {:?}", x)
-            };
-            for x in objs {
-                msg.body.push(x);
-            }
+            try!(read_exactly(sock, &mut msg.body, body_len as usize));
         }
 
         Ok(msg)

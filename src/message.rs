@@ -1,12 +1,10 @@
 //! Functions for creating and modifying messages to send across the message bus.
-use std::mem::transmute;
-use std::collections::HashMap;
-
 use dbus_serialize::types::{Path,Variant,Value,BasicValue,Signature};
 
 use marshal::{Marshal,pad_to_multiple};
+use demarshal::{demarshal,DemarshalError};
 
-#[derive(Debug,Default)]
+#[derive(Debug,Default,PartialEq)]
 pub struct MessageType(pub u8);
 pub const MESSAGE_TYPE_INVALID : MessageType        = MessageType(0);
 pub const MESSAGE_TYPE_METHOD_CALL : MessageType    = MessageType(1);
@@ -14,22 +12,22 @@ pub const MESSAGE_TYPE_METHOD_RETURN : MessageType  = MessageType(2);
 pub const MESSAGE_TYPE_ERROR : MessageType          = MessageType(3);
 pub const MESSAGE_TYPE_SIGNAL : MessageType         = MessageType(4);
 
-#[derive(Copy,Clone)]
-pub enum HeaderFieldName {
-    Invalid = 0,
-    Path = 1,
-    Interface = 2,
-    Member = 3,
-    ErrorName = 4,
-    ReplySerial = 5,
-    Destination = 6,
-    Sender = 7,
-    Signature = 8
-}
+pub const HEADER_FIELD_INVALID : u8     = 0;
+pub const HEADER_FIELD_PATH: u8         = 1;
+pub const HEADER_FIELD_INTERFACE: u8    = 2;
+pub const HEADER_FIELD_MEMBER: u8       = 3;
+pub const HEADER_FIELD_ERROR_NAME: u8   = 4;
+pub const HEADER_FIELD_REPLY_SERIAL: u8 = 5;
+pub const HEADER_FIELD_DESTINATION: u8  = 6;
+pub const HEADER_FIELD_SENDER: u8       = 7;
+pub const HEADER_FIELD_SIGNATURE: u8    = 8;
 
-struct HeaderField (
-    HeaderFieldName,
-    Variant
+pub const FLAGS_NO_REPLY_EXPECTED : u8  = 1;
+
+#[derive(Debug)]
+pub struct HeaderField (
+    pub u8,
+    pub Variant
 );
 
 impl Marshal for HeaderField {
@@ -46,65 +44,76 @@ impl Marshal for HeaderField {
     }
 }
 
-fn encode_header (msg_type: MessageType, serial: u32) -> Vec<u8> {
-    let mut buf = Vec::new();
-
-    let endian = 'l' as u8;
-    endian.dbus_encode(&mut buf);
-    msg_type.0.dbus_encode(&mut buf);
-    (0 as u8).dbus_encode(&mut buf);
-    (1 as u8).dbus_encode(&mut buf);
-    (0 as u32).dbus_encode(&mut buf);
-    serial.dbus_encode(&mut buf);
-    buf
+/// Represents a received message from the message bus
+#[derive(Debug,Default)]
+pub struct Message {
+    pub big_endian: bool,
+    pub message_type: MessageType,
+    pub flags: u8,
+    pub version: u8,
+    pub serial: u32,
+    pub headers: Vec<HeaderField>,
+    pub body: Vec<u8>
 }
 
-/// Container for the header of a D-Bus message.  Arguments can be added with add_arg()
-pub struct MessageBuf(pub Vec<u8>);
+impl Marshal for Message {
+    fn dbus_encode (&self, buf: &mut Vec<u8>) -> usize {
+        let endian = if self.big_endian { 'B' as u8 } else { 'l' as u8 };
+        endian.dbus_encode(buf);
+        self.message_type.0.dbus_encode(buf);
+        self.flags.dbus_encode(buf);
+        self.version.dbus_encode(buf);
+        let len : u32 = self.body.len() as u32;
+        len.dbus_encode(buf);
+        self.serial.dbus_encode(buf);
+        self.headers.dbus_encode(buf);
+        pad_to_multiple(buf, 8);
+        0
+    }
 
-/// Create a MessageBuf for a D-Bus method call.  Once a MessageBuf object is created, arguments
-/// can be added to the object with MessageBuf.add_arg
-pub fn create_method_call (dest: &str, path: &str, iface: &str, method: &str) -> MessageBuf {
-    let mut msg = encode_header(MESSAGE_TYPE_METHOD_CALL, 0);
-    let mut headers : Vec<HeaderField> = Vec::new();
-    let mut v = Variant::new(Value::from(dest), "s");
-    headers.push(HeaderField(HeaderFieldName::Destination, v));
-    v = Variant::new(Value::BasicValue(BasicValue::ObjectPath(Path(path.to_string()))), "o");
-    headers.push(HeaderField(HeaderFieldName::Path, v));
-    v = Variant::new(Value::from(iface), "s");
-    headers.push(HeaderField(HeaderFieldName::Interface, v));
-    v = Variant::new(Value::from(method), "s");
-    headers.push(HeaderField(HeaderFieldName::Member, v));
-    headers.dbus_encode(&mut msg);
-    pad_to_multiple(&mut msg, 8);
-
-    // Store the length of the header so we can easily compute body length later
-    let len = msg.len() as u32;
-    let mut lenbuf = Vec::new();
-    len.dbus_encode(&mut lenbuf);
-    set_length(&mut msg, &lenbuf);
-    MessageBuf(msg)
+    fn get_type (&self) -> String {
+        panic!("Don't do that.")
+    }
 }
 
-/// Create a MessageBuf for a D-Bus method return.  Once created, return values can be added to the
-/// object with MessageBuf.add_arg
-pub fn create_method_return(reply_serial: u32) -> MessageBuf {
-    let mut msg = encode_header(MESSAGE_TYPE_METHOD_RETURN, 0);
-    let mut headers : Vec<HeaderField> = Vec::new();
-    let v = Variant::new(Value::from(reply_serial), "u");
-    headers.push(HeaderField(HeaderFieldName::ReplySerial, v));
-    pad_to_multiple(&mut msg, 8);
-
-    // Store the length of the header so we can easily compute body length later
-    let len = msg.len() as u32;
-    let mut lenbuf = Vec::new();
-    len.dbus_encode(&mut lenbuf);
-    set_length(&mut msg, &lenbuf);
-    MessageBuf(msg)
+/// Create a Message for a D-Bus method call.  Once a Message is created, arguments
+/// can be added with Message.add_arg
+pub fn create_method_call (dest: &str, path: &str, iface: &str, method: &str) -> Message {
+    Message {
+        big_endian: false,
+        message_type: MESSAGE_TYPE_METHOD_CALL,
+        flags: 0,
+        version: 1,
+        serial: 0,
+        headers: Vec::new(),
+        body: Vec::new(),
+    }.add_header(HEADER_FIELD_DESTINATION,
+                 Variant::new(Value::from(dest), "s"))
+     .add_header(HEADER_FIELD_PATH,
+                 Variant::new(Value::BasicValue(BasicValue::ObjectPath(Path(path.to_string()))), "o"))
+     .add_header(HEADER_FIELD_INTERFACE,
+                 Variant::new(Value::from(iface), "s"))
+     .add_header(HEADER_FIELD_MEMBER,
+                 Variant::new(Value::from(method), "s"))
 }
 
-impl MessageBuf {
-    /// Add the given argument to the MessageBuf.  Accepts anything that implements the Marshal
+/// Create a Message for a D-Bus method return.  Once created, return values can be added
+/// with Message.add_arg
+pub fn create_method_return(reply_serial: u32) -> Message {
+    Message {
+        big_endian: false,
+        message_type: MESSAGE_TYPE_METHOD_RETURN,
+        flags: 0,
+        version: 1,
+        serial: 0,
+        headers: Vec::new(),
+        body: Vec::new(),
+    }.add_header(HEADER_FIELD_REPLY_SERIAL,
+                 Variant::new(Value::from(reply_serial), "u"))
+}
+
+impl Message {
+    /// Add the given argument to the Message.  Accepts anything that implements the Marshal
     /// trait, which is most basic types, as well as the general-purpose
     /// dbus_serialize::types::Value enum.
     ///
@@ -116,47 +125,41 @@ impl MessageBuf {
     ///     .add_arg(&1)
     ///     .add_arg(&"string");
     /// ```
-    pub fn add_arg(mut self, arg: &Marshal) -> MessageBuf {
-        arg.dbus_encode(&mut self.0);
+    pub fn add_arg(mut self, arg: &Marshal) -> Message {
+        arg.dbus_encode(&mut self.body);
         self
     }
-}
 
-const LEN_OFFSET : usize = 4;
-
-pub fn set_length (msg: &mut [u8], buf: &[u8]) {
-    for i in 0..buf.len() {
-        msg[i+LEN_OFFSET] = buf[i];
+    pub fn add_header(mut self, name: u8, val: Variant) -> Message {
+        self.headers.push(HeaderField (name, val));
+        self
     }
-}
 
-pub fn get_length (msg: &[u8]) -> u32 {
-    assert!(msg.len() >= LEN_OFFSET+4);
-    let mut lenbuf = [0; 4];
-    for i in 0..4 {
-        lenbuf[i] = msg[i+LEN_OFFSET];
+    /// Get the sequence of Values from out of a Message.  Returns None if the message doesn't have
+    /// a body.
+    pub fn get_body(&mut self) -> Result<Option<Vec<Value>>,DemarshalError> {
+        if self.body.len() == 0 {
+            return Ok(None);
+        }
+
+        // Get the signature out of the headers
+        let v = match self.headers.iter().position(|x| { x.0 == HEADER_FIELD_SIGNATURE }) {
+            Some(idx) => &self.headers[idx].1,
+            None => return Ok(None)
+        };
+
+        let sigval = match *v.object {
+            Value::BasicValue(BasicValue::Signature(ref x)) => x,
+            _ => return Ok(None)
+        };
+
+        let mut sig = "(".to_string() + &sigval.0 + ")";
+        let mut offset = 0;
+        match try!(demarshal(&mut self.body, &mut offset, &mut sig)) {
+            Value::Struct(x) => Ok(Some(x.objects)),
+            x => panic!("Didn't get a struct: {:?}", x)
+        }
     }
-    let len : u32 = unsafe { transmute(lenbuf) };
-    // len is already LE, so this is a no-op except on BE systems
-    len.to_le()
-}
-
-/// Represents a received message from the message bus
-#[derive(Debug,Default)]
-pub struct Message {
-    pub big_endian: bool,
-    pub message_type: MessageType,
-    pub flags: u8,
-    pub version: u8,
-    pub serial: u32,
-    pub headers: HashMap<u8,Value>,
-    pub body: Vec<Value>
-}
-
-#[test]
-fn test_header () {
-    let buf = encode_header(MESSAGE_TYPE_METHOD_CALL, 12);
-    println!("{:?}", buf);
 }
 
 #[test]
