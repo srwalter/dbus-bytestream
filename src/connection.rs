@@ -361,6 +361,7 @@ impl Connection {
     }
 }
 
+#[cfg(dbus)]
 #[cfg(test)]
 fn validate_connection(conn: &mut Connection) {
     let mut msg = message::create_method_call("org.freedesktop.DBus", "/org/freedesktop/DBus",
