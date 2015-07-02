@@ -5,6 +5,8 @@ extern crate dbus_serialize;
 extern crate rustc_serialize;
 extern crate unix_socket;
 extern crate libc;
+extern crate rand;
+extern crate crypto;
 
 pub mod demarshal;
 pub mod marshal;

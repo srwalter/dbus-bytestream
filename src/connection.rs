@@ -16,18 +16,26 @@
 //! let reply = conn.call_sync(&mut msg);
 //! println!("{:?}", reply);
 //! ```
+//!
 
 use std::env;
 use std::net::{TcpStream,ToSocketAddrs};
 use std::io;
 use std::io::{Read,Write};
+use std::fs::File;
 use std::ops::Deref;
 use std::path::Path;
 use std::str::FromStr;
+use std::string;
+use std::num::ParseIntError;
+use rand::Rand;
+use rand;
 use libc;
+use crypto::digest::Digest;
+use crypto;
 
 use unix_socket::UnixStream;
-use rustc_serialize::hex::ToHex;
+use rustc_serialize::hex::{ToHex,FromHex,FromHexError};
 use dbus_serialize::types::Value;
 use dbus_serialize::decoder::DBusDecoder;
 
@@ -81,6 +89,24 @@ impl From<address::ServerAddressError> for Error {
     }
 }
 
+impl From<FromHexError> for Error {
+    fn from(_x: FromHexError) -> Self {
+        Error::AuthFailed
+    }
+}
+
+impl From<string::FromUtf8Error> for Error {
+    fn from(_x: string::FromUtf8Error) -> Self {
+        Error::AuthFailed
+    }
+}
+
+impl From<ParseIntError> for Error {
+    fn from(_x: ParseIntError) -> Self {
+        Error::AuthFailed
+    }
+}
+
 fn read_exactly(sock: &mut StreamSocket, buf: &mut Vec<u8>, len: usize) -> Result<(),Error> {
     buf.truncate(0);
     buf.reserve(len);
@@ -108,6 +134,30 @@ fn read_line(sock: &mut StreamSocket) -> Result<String,Error> {
         last = chr;
     }
     Ok(line)
+}
+
+fn get_cookie(context: &str, cookie_id: &str) -> Result<String,Error> {
+    let hd = match env::home_dir() {
+        Some(x) => x,
+        None => return Err(Error::AuthFailed)
+    };
+    let filename = hd.join(".dbus-keyrings").join(context);
+    let mut f = try!(File::open(filename));
+    let mut contents = String::new();
+    try!(f.read_to_string(&mut contents));
+    let lines : Vec<&str> = contents.split('\n').collect();
+    for line in lines {
+        if !line.starts_with(cookie_id) {
+            continue;
+        }
+        let words : Vec<&str> = line.split(' ').collect();
+        if words.len() != 3 {
+            break;
+        }
+        return Ok(words[2].to_string());
+    }
+
+    Err(Error::AuthFailed)
 }
 
 impl Connection {
@@ -162,6 +212,71 @@ impl Connection {
         // Ready for action
         try!(sock.write_all(b"BEGIN\r\n"));
         Ok(())
+    }
+
+    fn auth_cookie(&mut self) -> Result<(),Error> {
+        let sock = self.get_sock();
+
+        let uid = unsafe {
+            libc::funcs::posix88::unistd::getuid()
+        };
+        let uid_str = uid.to_string();
+        let uid_hex = uid_str.into_bytes().to_hex();
+        let cmd = "AUTH DBUS_COOKIE_SHA1 ".to_string() + &uid_hex + "\r\n";
+        try!(sock.write_all(&cmd.into_bytes()));
+
+        // Read response
+        let resp = try!(read_line(sock));
+        let words : Vec<&str> = resp.split(' ').collect();
+        if words.len() != 2 {
+            return Err(Error::AuthFailed);
+        }
+        if words[0] != "DATA" {
+            return Err(Error::AuthFailed);
+        }
+
+        let bytes = try!(words[1].from_hex());
+        let challenge = try!(String::from_utf8(bytes));
+        let words : Vec<&str> = challenge.split(' ').collect();
+        if words.len() != 3 {
+            return Err(Error::AuthFailed);
+        }
+
+        let cookie = try!(get_cookie(words[0], words[1]));
+
+        let mut my_challenge = Vec::new();
+        for _ in 0..16 {
+            my_challenge.push(u8::rand(&mut rand::thread_rng()));
+        }
+        let hex_challenge = my_challenge.to_hex();
+
+        let my_cookie = words[2].to_string() + ":" + &hex_challenge + ":" + &cookie;
+        let mut hasher = crypto::sha1::Sha1::new();
+        hasher.input_str(&my_cookie);
+        let hash = hasher.result_str();
+
+        let my_resp = hex_challenge + " " + &hash;
+        let hex_resp = my_resp.into_bytes().to_hex();
+        let buf = "DATA ".to_string() + &hex_resp + "\r\n";
+        try!(sock.write_all(&buf.into_bytes()));
+
+        // Read response
+        let resp = try!(read_line(sock));
+        if !resp.starts_with("OK ") {
+            return Err(Error::AuthFailed);
+        }
+
+        // Ready for action
+        try!(sock.write_all(b"BEGIN\r\n"));
+        Ok(())
+    }
+
+    fn authenticate(&mut self) -> Result<(),Error> {
+        try!(self.send_nul_byte());
+        try!(self.auth_external()
+              .or_else(|_x| { self.auth_cookie() })
+              .or_else(|_x| { self.auth_anonymous() }));
+        self.say_hello()
     }
 
     fn say_hello(&mut self) -> Result<(),Error> {
@@ -220,9 +335,7 @@ impl Connection {
             next_serial: 1
         };
 
-        try!(conn.send_nul_byte());
-        try!(conn.auth_external());
-        try!(conn.say_hello());
+        try!(conn.authenticate());
         Ok(conn)
     }
 
@@ -236,9 +349,7 @@ impl Connection {
             next_serial: 1
         };
 
-        try!(conn.send_nul_byte());
-        try!(conn.auth_anonymous());
-        try!(conn.say_hello());
+        try!(conn.authenticate());
         Ok(conn)
     }
 
