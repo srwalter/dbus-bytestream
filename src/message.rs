@@ -89,14 +89,10 @@ pub fn create_method_call (dest: &str, path: &str, iface: &str, method: &str) ->
         serial: 0,
         headers: Vec::new(),
         body: Vec::new(),
-    }.add_header(HEADER_FIELD_DESTINATION,
-                 Variant::new(Value::from(dest), "s"))
-     .add_header(HEADER_FIELD_PATH,
-                 Variant::new(Value::BasicValue(BasicValue::ObjectPath(Path(path.to_string()))), "o"))
-     .add_header(HEADER_FIELD_INTERFACE,
-                 Variant::new(Value::from(iface), "s"))
-     .add_header(HEADER_FIELD_MEMBER,
-                 Variant::new(Value::from(method), "s"))
+    }.add_destination_header(dest)
+     .add_path_header(Path(path.to_string()))
+     .add_interface_header(iface)
+     .add_member_header(method)
 }
 
 /// Create a Message for a D-Bus method return.  Once created, return values can be added
@@ -110,8 +106,7 @@ pub fn create_method_return(reply_serial: u32) -> Message {
         serial: 0,
         headers: Vec::new(),
         body: Vec::new(),
-    }.add_header(HEADER_FIELD_REPLY_SERIAL,
-                 Variant::new(Value::from(reply_serial), "u"))
+    }.add_reply_header(reply_serial)
 }
 
 /// Create a Message for a D-Bus error.  Once created, return values can be added
@@ -125,10 +120,8 @@ pub fn create_error(error_name: &str, reply_serial: u32) -> Message {
         serial: 0,
         headers: Vec::new(),
         body: Vec::new(),
-    }.add_header(HEADER_FIELD_REPLY_SERIAL,
-                 Variant::new(Value::from(reply_serial), "u"))
-     .add_header(HEADER_FIELD_ERROR_NAME,
-                 Variant::new(Value::from(error_name), "s"))
+    }.add_reply_header(reply_serial)
+     .add_error_header(error_name)
 }
 
 /// Create a Message for a D-Bus signal.  Once created, return values can be added
@@ -142,12 +135,9 @@ pub fn create_signal(path: &str, interface: &str, member: &str) -> Message {
         serial: 0,
         headers: Vec::new(),
         body: Vec::new(),
-    }.add_header(HEADER_FIELD_PATH,
-                 Variant::new(Value::BasicValue(BasicValue::ObjectPath(Path(path.to_string()))), "o"))
-     .add_header(HEADER_FIELD_INTERFACE,
-                 Variant::new(Value::from(interface), "s"))
-     .add_header(HEADER_FIELD_MEMBER,
-                 Variant::new(Value::from(member), "s"))
+    }.add_path_header(Path(path.to_string()))
+     .add_interface_header(interface)
+     .add_member_header(member)
 }
 
 impl Message {
@@ -194,6 +184,36 @@ impl Message {
     pub fn add_header(mut self, name: u8, val: Variant) -> Message {
         self.headers.push(HeaderField (name, val));
         self
+    }
+
+    pub fn add_destination_header(self, destination: &str) -> Message {
+        self.add_header(HEADER_FIELD_DESTINATION,
+                        Variant::new(Value::from(destination), "s"))
+    }
+
+    pub fn add_interface_header(self, interface: &str) -> Message {
+        self.add_header(HEADER_FIELD_INTERFACE,
+                        Variant::new(Value::from(interface), "s"))
+    }
+
+    pub fn add_member_header(self, member: &str) -> Message {
+        self.add_header(HEADER_FIELD_MEMBER,
+                        Variant::new(Value::from(member), "s"))
+    }
+
+    pub fn add_path_header(self, path: Path) -> Message {
+        self.add_header(HEADER_FIELD_PATH,
+                        Variant::new(Value::BasicValue(BasicValue::ObjectPath(path)), "o"))
+    }
+
+    pub fn add_error_header(self, error_name: &str) -> Message {
+        self.add_header(HEADER_FIELD_ERROR_NAME,
+                        Variant::new(Value::from(error_name), "s"))
+    }
+
+    pub fn add_reply_header(self, reply_serial: u32) -> Message {
+        self.add_header(HEADER_FIELD_REPLY_SERIAL,
+                        Variant::new(Value::from(reply_serial), "u"))
     }
 
     /// Get the sequence of Values from out of a Message.  Returns None if the message doesn't have
