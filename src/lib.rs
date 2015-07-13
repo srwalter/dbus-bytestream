@@ -12,6 +12,7 @@ pub mod demarshal;
 pub mod marshal;
 pub mod message;
 pub mod connection;
+pub mod dispatch;
 
 mod address;
 pub mod addr {
