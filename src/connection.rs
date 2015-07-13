@@ -3,7 +3,7 @@
 //! 
 //! # Examples
 //! ```
-//! use dbus_bytestream::connection::Connection;
+//! use dbus_bytestream::connection::{Connection, MessageSender};
 //! use dbus_bytestream::message;
 //!
 //! let mut conn = Connection::connect_system().unwrap();
@@ -353,60 +353,6 @@ impl Connection {
         Ok(conn)
     }
 
-    /// Sends a message over the connection.  The Message can be created by one of the functions
-    /// from the message module, such as message::create_method_call .  On success, returns the
-    /// serial number of the outgoing message so that the reply can be identified.
-    pub fn send(&mut self, mbuf: &mut Message) -> Result<u32, Error> {
-        let this_serial = self.next_serial;
-        self.next_serial += 1;
-        mbuf.serial = this_serial;
-
-        let mut msg = Vec::new();
-        mbuf.dbus_encode(&mut msg);
-
-        let sock = self.get_sock();
-        try!(sock.write_all(&msg));
-        try!(sock.write_all(&mbuf.body));
-        Ok(this_serial)
-    }
-
-    /// Sends a message over a connection and block until a reply is received.  This is only valid
-    /// for method calls.  Returns the sequence of Value objects that is the body of the method
-    /// return.
-    ///
-    /// # Panics
-    /// Calling this function with a Message for other than METHOD_CALL or with the
-    /// NO_REPLY_EXPECTED flag set is a programming error and will panic.
-    pub fn call_sync(&mut self, mbuf: &mut Message) -> Result<Option<Vec<Value>>,Error> {
-        assert_eq!(mbuf.message_type, message::MESSAGE_TYPE_METHOD_CALL);
-        assert_eq!(mbuf.flags & message::FLAGS_NO_REPLY_EXPECTED, 0);
-        let serial = try!(self.send(mbuf));
-        // We need a local queue so that read_msg doesn't just give us
-        // the same one over and over
-        let mut queue = Vec::new();
-        loop {
-            let mut msg = try!(self.read_msg());
-            match msg.headers.iter().position(|x| { x.0 == message::HEADER_FIELD_REPLY_SERIAL }) {
-                Some(idx) => {
-                    let obj = {
-                        let x = &msg.headers[idx].1;
-                        x.object.deref().clone()
-                    };
-                    let reply_serial : u32 = DBusDecoder::decode(obj).unwrap();
-                    if reply_serial == serial {
-                        // Move our queued messages into the Connection's queue
-                        for _ in 0..queue.len() {
-                            self.queue.push(queue.remove(0));
-                        }
-                        return Ok(try!(msg.get_body()))
-                    };
-                }
-                _ => ()
-            };
-            queue.push(msg);
-        }
-    }
-
     /// Blocks until a message comes in from the message bus.  The received message is returned.
     pub fn read_msg(&mut self) -> Result<Message,Error> {
         match self.queue.get(0) {
@@ -486,6 +432,67 @@ impl Connection {
         }
 
         Ok(msg)
+    }
+}
+
+pub trait MessageSender {
+    fn send(&mut self, mbuf: &mut Message) -> Result<u32, Error>;
+    fn call_sync(&mut self, mbuf: &mut Message) -> Result<Option<Vec<Value>>,Error>;
+}
+
+impl MessageSender for Connection {
+    /// Sends a message over the connection.  The Message can be created by one of the functions
+    /// from the message module, such as message::create_method_call .  On success, returns the
+    /// serial number of the outgoing message so that the reply can be identified.
+    fn send(&mut self, mbuf: &mut Message) -> Result<u32, Error> {
+        let this_serial = self.next_serial;
+        self.next_serial += 1;
+        mbuf.serial = this_serial;
+
+        let mut msg = Vec::new();
+        mbuf.dbus_encode(&mut msg);
+
+        let sock = self.get_sock();
+        try!(sock.write_all(&msg));
+        try!(sock.write_all(&mbuf.body));
+        Ok(this_serial)
+    }
+
+    /// Sends a message over a connection and block until a reply is received.  This is only valid
+    /// for method calls.  Returns the sequence of Value objects that is the body of the method
+    /// return.
+    ///
+    /// # Panics
+    /// Calling this function with a Message for other than METHOD_CALL or with the
+    /// NO_REPLY_EXPECTED flag set is a programming error and will panic.
+    fn call_sync(&mut self, mbuf: &mut Message) -> Result<Option<Vec<Value>>,Error> {
+        assert_eq!(mbuf.message_type, message::MESSAGE_TYPE_METHOD_CALL);
+        assert_eq!(mbuf.flags & message::FLAGS_NO_REPLY_EXPECTED, 0);
+        let serial = try!(self.send(mbuf));
+        // We need a local queue so that read_msg doesn't just give us
+        // the same one over and over
+        let mut queue = Vec::new();
+        loop {
+            let mut msg = try!(self.read_msg());
+            match msg.headers.iter().position(|x| { x.0 == message::HEADER_FIELD_REPLY_SERIAL }) {
+                Some(idx) => {
+                    let obj = {
+                        let x = &msg.headers[idx].1;
+                        x.object.deref().clone()
+                    };
+                    let reply_serial : u32 = DBusDecoder::decode(obj).unwrap();
+                    if reply_serial == serial {
+                        // Move our queued messages into the Connection's queue
+                        for _ in 0..queue.len() {
+                            self.queue.push(queue.remove(0));
+                        }
+                        return Ok(try!(msg.get_body()))
+                    };
+                }
+                _ => ()
+            };
+            queue.push(msg);
+        }
     }
 }
 
