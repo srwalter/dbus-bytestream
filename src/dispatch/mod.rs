@@ -80,6 +80,8 @@ use message;
 use message::{Message,SpecializedMessage,MethodCall,Signal};
 use demarshal::DemarshalError;
 
+pub mod wrapper;
+
 #[derive(Debug)]
 pub enum DispatchError {
     MessageDecodeError(DemarshalError),
