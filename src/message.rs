@@ -325,6 +325,122 @@ impl Message {
     }
 }
 
+pub struct MethodCall {
+    pub path: String,
+    pub interface: Option<String>,
+    pub member: String,
+    pub error_name: Option<String>,
+    pub reply_serial: Option<u32>,
+}
+
+pub struct MethodReturn {
+    pub path: Option<String>,
+    pub interface: Option<String>,
+    pub member: Option<String>,
+    pub error_name: Option<String>,
+    pub reply_serial: u32,
+}
+
+pub struct Error {
+    pub path: Option<String>,
+    pub interface: Option<String>,
+    pub member: Option<String>,
+    pub error_name: String,
+    pub reply_serial: u32,
+}
+
+pub struct Signal {
+    pub path: String,
+    pub interface: String,
+    pub member: String,
+    pub error_name: Option<String>,
+    pub reply_serial: Option<u32>,
+}
+
+pub enum SpecializedMessage {
+    MethodCall(MethodCall),
+    MethodReturn(MethodReturn),
+    Error(Error),
+    Signal(Signal)
+}
+
+pub struct ParsedMessage {
+    pub flags: u8,
+    pub version: u8,
+    pub serial: u32,
+    pub destination: Option<String>,
+    pub sender: Option<String>,
+    pub signature: Option<String>,
+    pub message_type: SpecializedMessage,
+    pub body: Option<Vec<Value>>,
+}
+
+impl Message {
+    pub fn parse(&mut self) -> Result<ParsedMessage,DemarshalError> {
+        let body = try!(self.get_body());
+        let destination = self.get_destination();
+        let sender = self.get_sender();
+        let signature = self.get_signature();
+        let message_type = match self.message_type {
+            MESSAGE_TYPE_METHOD_CALL => {
+                let path = try!(self.get_path().ok_or(DemarshalError::CorruptedMessage));
+                let member = try!(self.get_member().ok_or(DemarshalError::CorruptedMessage));
+                SpecializedMessage::MethodCall(MethodCall {
+                    path: path,
+                    member: member,
+                    interface: self.get_interface(),
+                    error_name: self.get_error_name(),
+                    reply_serial: self.get_reply_serial()
+                })
+            },
+            MESSAGE_TYPE_METHOD_RETURN => {
+                let reply_serial = try!(self.get_reply_serial().ok_or(DemarshalError::CorruptedMessage));
+                SpecializedMessage::MethodReturn(MethodReturn {
+                    path: self.get_path(),
+                    interface: self.get_interface(),
+                    member: self.get_member(),
+                    error_name: self.get_error_name(),
+                    reply_serial: reply_serial
+                })
+            },
+            MESSAGE_TYPE_ERROR => {
+                let reply_serial = try!(self.get_reply_serial().ok_or(DemarshalError::CorruptedMessage));
+                let error_name = try!(self.get_error_name().ok_or(DemarshalError::CorruptedMessage));
+                SpecializedMessage::Error(Error {
+                    path: self.get_path(),
+                    interface: self.get_interface(),
+                    member: self.get_member(),
+                    error_name: error_name,
+                    reply_serial: reply_serial
+                })
+            },
+            MESSAGE_TYPE_SIGNAL => {
+                let path = try!(self.get_path().ok_or(DemarshalError::CorruptedMessage));
+                let interface = try!(self.get_interface().ok_or(DemarshalError::CorruptedMessage));
+                let member = try!(self.get_member().ok_or(DemarshalError::CorruptedMessage));
+                SpecializedMessage::Signal(Signal {
+                    path: path,
+                    interface: interface,
+                    member: member,
+                    error_name: self.get_error_name(),
+                    reply_serial: self.get_reply_serial()
+                })
+            }
+            _ => return Err(DemarshalError::CorruptedMessage)
+        };
+        Ok(ParsedMessage {
+            flags: self.flags,
+            version: self.version,
+            serial: self.serial,
+            destination: destination,
+            sender: sender,
+            signature: signature,
+            message_type: message_type,
+            body: body
+        })
+    }
+}
+
 #[test]
 fn test_msg () {
     create_method_call("foo", "bar", "baz", "floob")
