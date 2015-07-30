@@ -181,6 +181,94 @@ impl Message {
         }
     }
 
+    pub fn get_path (&mut self) -> Option<String> {
+        let b = match self.get_header(HEADER_FIELD_PATH) {
+            Some(x) => x,
+            _ => return None
+        };
+        match *b.object {
+            Value::BasicValue(BasicValue::ObjectPath(Path(ref x))) => Some(x.to_string()),
+            _ => return None
+        }
+    }
+
+    pub fn get_interface (&mut self) -> Option<String> {
+        let b = match self.get_header(HEADER_FIELD_INTERFACE) {
+            Some(x) => x,
+            _ => return None
+        };
+        match *b.object {
+            Value::BasicValue(BasicValue::String(ref x)) => Some(x.to_string()),
+            _ => return None
+        }
+    }
+
+    pub fn get_member (&mut self) -> Option<String> {
+        let b = match self.get_header(HEADER_FIELD_MEMBER) {
+            Some(x) => x,
+            _ => return None
+        };
+        match *b.object {
+            Value::BasicValue(BasicValue::String(ref x)) => Some(x.to_string()),
+            _ => return None
+        }
+    }
+
+    pub fn get_error_name (&mut self) -> Option<String> {
+        let b = match self.get_header(HEADER_FIELD_ERROR_NAME) {
+            Some(x) => x,
+            _ => return None
+        };
+        match *b.object {
+            Value::BasicValue(BasicValue::String(ref x)) => Some(x.to_string()),
+            _ => return None
+        }
+    }
+
+    pub fn get_reply_serial (&mut self) -> Option<u32> {
+        let b = match self.get_header(HEADER_FIELD_REPLY_SERIAL) {
+            Some(x) => x,
+            _ => return None
+        };
+        match *b.object {
+            Value::BasicValue(BasicValue::Uint32(x)) => Some(x),
+            _ => return None
+        }
+    }
+
+    pub fn get_destination (&mut self) -> Option<String> {
+        let b = match self.get_header(HEADER_FIELD_DESTINATION) {
+            Some(x) => x,
+            _ => return None
+        };
+        match *b.object {
+            Value::BasicValue(BasicValue::String(ref x)) => Some(x.to_string()),
+            _ => return None
+        }
+    }
+
+    pub fn get_sender (&mut self) -> Option<String> {
+        let b = match self.get_header(HEADER_FIELD_SENDER) {
+            Some(x) => x,
+            _ => return None
+        };
+        match *b.object {
+            Value::BasicValue(BasicValue::String(ref x)) => Some(x.to_string()),
+            _ => return None
+        }
+    }
+
+    pub fn get_signature (&mut self) -> Option<String> {
+        let b = match self.get_header(HEADER_FIELD_SIGNATURE) {
+            Some(x) => x,
+            _ => return None
+        };
+        match *b.object {
+            Value::BasicValue(BasicValue::Signature(Signature(ref x))) => Some(x.to_string()),
+            _ => return None
+        }
+    }
+
     pub fn add_header(mut self, name: u8, val: Variant) -> Message {
         self.headers.push(HeaderField (name, val));
         self
@@ -223,18 +311,12 @@ impl Message {
             return Ok(None);
         }
 
-        // Get the signature out of the headers
-        let v = match self.headers.iter().position(|x| { x.0 == HEADER_FIELD_SIGNATURE }) {
-            Some(idx) => &self.headers[idx].1,
-            None => return Ok(None)
+        let sigval = match self.get_signature() {
+            Some(sig) => sig,
+            _ => return Err(DemarshalError::CorruptedMessage)
         };
 
-        let sigval = match *v.object {
-            Value::BasicValue(BasicValue::Signature(ref x)) => x,
-            _ => return Ok(None)
-        };
-
-        let mut sig = "(".to_string() + &sigval.0 + ")";
+        let mut sig = "(".to_string() + &sigval + ")";
         let mut offset = 0;
         match try!(demarshal(&mut self.body, &mut offset, &mut sig)) {
             Value::Struct(x) => Ok(Some(x.objects)),
