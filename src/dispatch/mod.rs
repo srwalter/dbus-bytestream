@@ -77,39 +77,19 @@ use dbus_serialize::types::Value;
 use connection;
 use connection::MessageSender;
 use message;
-use message::Message;
-
-pub mod message_types;
-use self::message_types::*;
-
-#[test]
-fn test_decode_message() {
-    /* Method call */
-    let mut msg = message::create_method_call("dest", "path", "interface", "method");
-    if let MessageType::Method(mth) = decode_message(&mut msg).unwrap() {
-        assert_eq!(mth.path, "path");
-        assert_eq!(mth.interface, "interface");
-        assert_eq!(mth.member, "method");
-    }
-
-    /* Signal */
-    let mut msg = message::create_signal("path", "interface", "method");
-    if let MessageType::Signal(sig) = decode_message(&mut msg).unwrap() {
-        assert_eq!(sig.path, "path");
-    }
-
-}
+use message::{Message,SpecializedMessage,MethodCall,Signal};
+use demarshal::DemarshalError;
 
 #[derive(Debug)]
 pub enum DispatchError {
-    MessageDecodeError(MessageDecodeError),
+    MessageDecodeError(DemarshalError),
     InvalidArguments,
     UnhandledMessage,
     OtherError(String),
 }
 
-impl From<MessageDecodeError> for DispatchError {
-    fn from(e: MessageDecodeError) -> Self {
+impl From<DemarshalError> for DispatchError {
+    fn from(e: DemarshalError) -> Self {
         DispatchError::MessageDecodeError(e)
     }
 }
@@ -175,12 +155,12 @@ use std::borrow::Cow;
 #[derive(Hash, PartialEq, Eq)]
 struct DBusMatch<'a> {
     path: Cow<'a, str>,
-    interface: Cow<'a, str>,
+    interface: Option<Cow<'a, str>>,
     member: Cow<'a, str>,
 }
 
 impl<'a> DBusMatch<'a> {
-    fn new(path: Cow<'a, str>, interface: Cow<'a, str>, member: Cow<'a, str>) -> Self {
+    fn new(path: Cow<'a, str>, interface: Option<Cow<'a, str>>, member: Cow<'a, str>) -> Self {
         DBusMatch {
             path: path,
             interface: interface,
@@ -211,7 +191,7 @@ impl<'k, 'v> MessageDispatcher<'k, 'v> {
             // key, which in the case of MessageDispatcher includes a lifetime
             // bound. I can't find a way to get around the K: Borrow<Q> constraint.
             let s = DBusMatch::new(sig.path.clone().into(),
-                                   sig.interface.clone().into(),
+                                   Some(sig.interface.clone().into()),
                                    sig.member.clone().into());
             self.sig_handlers.get_mut(&s)
         };
@@ -227,7 +207,7 @@ impl<'k, 'v> MessageDispatcher<'k, 'v> {
             // key, which in the case of MessageDispatcher includes a lifetime
             // bound. I can't find a way to get around the K: Borrow<Q> constraint.
             let s = DBusMatch::new(mth.path.clone().into(),
-                                   mth.interface.clone().into(),
+                                   mth.interface.clone().map(|x| { x.into() }),
                                    mth.member.clone().into());
             self.mth_handlers.get_mut(&s)
         };
@@ -251,28 +231,28 @@ impl<'k, 'v> MessageDispatcher<'k, 'v> {
     }
 
     pub fn add_signal(&mut self, path: Cow<'k, str>, interface: Cow<'k, str>, member: Cow<'k, str>, cl: SignalHandler<'v>) {
-        self.sig_handlers.insert(DBusMatch::new(path, interface, member), cl);
+        self.sig_handlers.insert(DBusMatch::new(path, Some(interface), member), cl);
     }
 
-    pub fn add_method(&mut self, path: Cow<'k, str>, interface: Cow<'k, str>, member: Cow<'k, str>, cl: MethodHandler<'v>) {
+    pub fn add_method(&mut self, path: Cow<'k, str>, interface: Option<Cow<'k, str>>, member: Cow<'k, str>, cl: MethodHandler<'v>) {
         self.mth_handlers.insert(DBusMatch::new(path, interface, member), cl);
     }
 }
 
 impl<'k, 'v> MessageHandler for MessageDispatcher<'k, 'v> {
     fn handle_message<T: MessageSender>(&mut self, sender: &mut T, mut msg: Message) -> HandlerResult {
-        let r = decode_message(&mut msg).map_err(From::from)
+        let r = msg.parse().map_err(From::from)
             /* Dispatch based on message type */
-            .and_then(|msgtype| {
-                match msgtype {
-                    MessageType::Signal(s) =>
+            .and_then(|parsed_msg| {
+                match parsed_msg.message_type {
+                    SpecializedMessage::Signal(s) =>
                         self.dispatch_sig(sender, s),
-                    MessageType::Method(s) =>
+                    SpecializedMessage::MethodCall(s) =>
                         self.dispatch_mth(sender, s, msg.serial,
                                           (msg.flags & message::FLAGS_NO_REPLY_EXPECTED) == 0),
-                    MessageType::MethodReturn(_) =>
+                    SpecializedMessage::MethodReturn(_) =>
                         Err(DispatchError::UnhandledMessage), // Unimplemented
-                    MessageType::Error(_) =>
+                    SpecializedMessage::Error(_) =>
                         Err(DispatchError::UnhandledMessage), // Unimplemented
                 }
             });
@@ -340,16 +320,15 @@ impl HandlerChain for HandlerResult {
 #[cfg(test)]
 mod test {
     use super::*;
-    use super::message_types::{decode_message, MessageType};
     use connection;
     use connection::MessageSender;
     use message;
-    use message::Message;
+    use message::{Message,SpecializedMessage};
     use dbus_serialize::types::Value;
 
     #[derive(Default)]
     struct DummySender {
-        msgs: Vec<MessageType>,
+        msgs: Vec<ParsedMessage>,
     }
 
     impl DummySender {
@@ -360,7 +339,7 @@ mod test {
 
     impl MessageSender for DummySender {
         fn send(&mut self, mbuf: &mut Message) -> Result<u32, connection::Error> {
-            self.msgs.push(decode_message(mbuf).unwrap());
+            self.msgs.push(mbuf.parse().unwrap());
             Err(connection::Error::Disconnected)
         }
 
@@ -392,11 +371,11 @@ mod test {
 
         let mut sender = DummySender::new();
 
-        mth_dis.add_method("path".into(), "interface".into(), "method".into(),
+        mth_dis.add_method("path".into(), Some("interface".into()), "method".into(),
                         Box::new(|_sender, mth| {
                             mth_called.set(true);
                             assert_eq!(mth.path, "path");
-                            assert_eq!(mth.interface, "interface");
+                            assert_eq!(mth.interface.unwrap(), "interface");
                             assert_eq!(mth.member, "method");
                             Ok(MethodRetVal::Reply(vec![Value::from(10)]))
                         } ));
@@ -420,8 +399,9 @@ mod test {
         /* Pop the connection error reply. Probably doesn't make sense to return errors for failed connections. */
         sender.msgs.pop().unwrap();
         /* Sender should have sent a MethodReturn message */
-        match sender.msgs.pop().unwrap() {
-            MessageType::MethodReturn(r) => assert_eq!(r.body.unwrap().get(0).unwrap(), &Value::from(10)),
+        let parsed_msg : ParsedMessage = sender.msgs.pop().unwrap();
+        match parsed_msg.message_type {
+            SpecializedMessage::MethodReturn(ref r) => assert_eq!(parsed_msg.body.unwrap().get(0).unwrap(), &Value::from(10)),
             _ => panic!("MethodReturn to be generated"),
         }
 
@@ -448,10 +428,31 @@ mod test {
         assert_eq!(err, "Connection send error Disconnected");
 
         /* Sender should have sent an UnknownObject message */
-        match sender.msgs.pop().unwrap() {
-            MessageType::Error(e) => assert_eq!(e.error_name, "org.freedesktop.DBus.Error.UnknownObject"),
+        match sender.msgs.pop().unwrap().message_type {
+            SpecializedMessage::Error(e) => assert_eq!(e.error_name, "org.freedesktop.DBus.Error.UnknownObject"),
             _ => panic!("Expected error to be generated"),
         }
         assert_eq!(sender.msgs.len(), 0);
+    }
+
+    use message::ParsedMessage;
+
+    #[test]
+    fn test_decode_message() {
+
+        /* Method call */
+        let mut msg = message::create_method_call("dest", "path", "interface", "method");
+        if let SpecializedMessage::MethodCall(mth) = msg.parse().unwrap().message_type {
+            assert_eq!(mth.path, "path");
+            assert_eq!(mth.interface.unwrap(), "interface");
+            assert_eq!(mth.member, "method");
+        }
+
+        /* Signal */
+        let mut msg = message::create_signal("path", "interface", "method");
+        if let SpecializedMessage::Signal(sig) = msg.parse().unwrap().message_type {
+            assert_eq!(sig.path, "path");
+        }
+
     }
 }
