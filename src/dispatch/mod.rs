@@ -184,32 +184,32 @@ impl<'k, 'v> MessageDispatcher<'k, 'v> {
         Default::default()
     }
 
-    fn dispatch_sig<T: MessageSender>(&mut self, sender: &mut T, sig: Signal) -> DispatchResult {
+    fn dispatch_sig<T: MessageSender>(&mut self, sender: &mut T, mut sig: Signal) -> DispatchResult {
         let handler = {
-            // XXX copying the strings here.
-            // The argument to HashMap::get_mut() must have the same type as the
-            // key, which in the case of MessageDispatcher includes a lifetime
-            // bound. I can't find a way to get around the K: Borrow<Q> constraint.
-            let s = DBusMatch::new(sig.path.clone().into(),
-                                   Some(sig.interface.clone().into()),
-                                   sig.member.clone().into());
-            self.sig_handlers.get_mut(&s)
+            let s = DBusMatch::new(sig.path.into(),
+                                   Some(sig.interface.into()),
+                                   sig.member.into());
+            let handler = self.sig_handlers.get_mut(&s);
+            sig.path = s.path.into_owned();
+            sig.interface = s.interface.unwrap().into_owned();
+            sig.member = s.member.into_owned();
+            handler
         };
         handler.ok_or(DispatchError::UnhandledMessage)
             .and_then(|h| { h(MessageSenderWrapper(sender), sig) })
     }
 
-    fn dispatch_mth<T: MessageSender>(&mut self, sender: &mut T, mth: MethodCall,
+    fn dispatch_mth<T: MessageSender>(&mut self, sender: &mut T, mut mth: MethodCall,
                                       reply_serial: u32, reply_expected: bool) -> DispatchResult {
         let handler = {
-            // XXX copying the strings here.
-            // The argument to HashMap::get_mut() must have the same type as the
-            // key, which in the case of MessageDispatcher includes a lifetime
-            // bound. I can't find a way to get around the K: Borrow<Q> constraint.
-            let s = DBusMatch::new(mth.path.clone().into(),
-                                   mth.interface.clone().map(|x| { x.into() }),
-                                   mth.member.clone().into());
-            self.mth_handlers.get_mut(&s)
+            let s = DBusMatch::new(mth.path.into(),
+                                   mth.interface.map(|x| { x.into() }),
+                                   mth.member.into());
+            let handler = self.mth_handlers.get_mut(&s);
+            mth.path = s.path.into_owned();
+            mth.interface = s.interface.map(|x| { x.into_owned() });
+            mth.member = s.member.into_owned();
+            handler
         };
         handler.ok_or(DispatchError::UnhandledMessage)
             .and_then(|h| { h(MessageSenderWrapper(sender), mth) })
