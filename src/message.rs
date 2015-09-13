@@ -196,7 +196,7 @@ impl Message {
     /// Get the sequence of Values from out of a Message.  Returns None if the message doesn't have
     /// a body.
     pub fn get_body(&mut self) -> Result<Option<Vec<Value>>,DemarshalError> {
-        if self.body.len() == 0 {
+        if self.body.is_empty() {
             return Ok(None);
         }
 
