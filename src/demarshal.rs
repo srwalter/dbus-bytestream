@@ -150,11 +150,7 @@ fn demarshal_array(buf: &mut Vec<u8>, offset: &mut usize, sig: &mut String) -> R
         return Err(DemarshalError::BadSignature);
     }
     let typ = sig.chars().next().unwrap();
-    let is_dict = if typ == '{' {
-        true
-    } else {
-        false
-    };
+    let is_dict = typ == '{';
     // demarshal_int ensure we're correctly aligned with input
     let array_len = match demarshal_int(buf, offset, 4, false) {
         Ok(Value::BasicValue(BasicValue::Uint32(x))) => x,
