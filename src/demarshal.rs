@@ -41,7 +41,7 @@ fn demarshal_byte(buf: &mut Vec<u8>, offset: &mut usize) -> Result<Value,Demarsh
     }
     let byte = buf.remove(0);
     *offset += 1;
-    return Ok(Value::BasicValue(BasicValue::Byte(byte)))
+    Ok(Value::BasicValue(BasicValue::Byte(byte)))
 }
 
 fn align_to(buf: &mut Vec<u8>, offset: &mut usize, align: usize) -> Result<(),DemarshalError> {
