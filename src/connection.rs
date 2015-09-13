@@ -422,20 +422,17 @@ impl Connection {
         let mut queue = VecDeque::new();
         loop {
             let mut msg = try!(self.read_msg());
-            match msg.headers.iter().position(|x| { x.0 == message::HEADER_FIELD_REPLY_SERIAL }) {
-                Some(idx) => {
-                    let obj = {
-                        let x = &msg.headers[idx].1;
-                        x.object.deref().clone()
-                    };
-                    let reply_serial : u32 = DBusDecoder::decode(obj).unwrap();
-                    if reply_serial == serial {
-                        // Move our queued messages into the Connection's queue
-                        self.push_queue(&mut queue);
-                        return Ok(try!(msg.get_body()))
-                    };
-                }
-                _ => ()
+            if let Some(idx) = msg.headers.iter().position(|x| { x.0 == message::HEADER_FIELD_REPLY_SERIAL }) {
+                let obj = {
+                    let x = &msg.headers[idx].1;
+                    x.object.deref().clone()
+                };
+                let reply_serial : u32 = DBusDecoder::decode(obj).unwrap();
+                if reply_serial == serial {
+                    // Move our queued messages into the Connection's queue
+                    self.push_queue(&mut queue);
+                    return Ok(try!(msg.get_body()))
+                };
             };
             queue.push_back(msg);
         }

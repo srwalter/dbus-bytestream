@@ -164,13 +164,10 @@ impl Message {
     ///     .add_arg(&"string");
     /// ```
     pub fn add_arg(mut self, arg: &Marshal) -> Message {
-        match self.get_header(HEADER_FIELD_SIGNATURE) {
-            None => {
-                let value = Value::BasicValue(BasicValue::Signature(Signature("".to_owned())));
-                let variant = Variant::new(value, "g");
-                self = self.add_header(HEADER_FIELD_SIGNATURE, variant);
-            },
-            _ => ()
+        if let None = self.get_header(HEADER_FIELD_SIGNATURE) {
+            let value = Value::BasicValue(BasicValue::Signature(Signature("".to_owned())));
+            let variant = Variant::new(value, "g");
+            self = self.add_header(HEADER_FIELD_SIGNATURE, variant);
         };
         {
             let b : &mut Box<Value> = &mut self.get_header(HEADER_FIELD_SIGNATURE).unwrap().object;
