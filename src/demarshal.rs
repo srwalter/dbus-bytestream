@@ -190,8 +190,8 @@ fn demarshal_array(buf: &mut Vec<u8>, offset: &mut usize, sig: &mut String) -> R
                 _ => panic!("Dictionaries should contain structs")
             };
             let val = s.objects.remove(1);
-            let key = match &s.objects[0] {
-                &Value::BasicValue(ref x) => x,
+            let key = match s.objects[0] {
+                Value::BasicValue(ref x) => x,
                 _ => panic!("Dictionaries require BasicValue keys")
             };
             map.insert(key.clone(), val);

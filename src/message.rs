@@ -175,8 +175,8 @@ impl Message {
         {
             let b : &mut Box<Value> = &mut self.get_header(HEADER_FIELD_SIGNATURE).unwrap().object;
             let val : &mut Value = b.deref_mut();
-            match val {
-                &mut Value::BasicValue(BasicValue::Signature(ref mut s)) => s.0.push_str(&arg.get_type()),
+            match *val {
+                Value::BasicValue(BasicValue::Signature(ref mut s)) => s.0.push_str(&arg.get_type()),
                 _ => panic!("Garbage in signature field")
             };
         }

@@ -299,18 +299,18 @@ impl Marshal for Variant {
 
 impl Marshal for BasicValue {
     fn dbus_encode(&self, buf: &mut Vec<u8>) -> usize {
-        match self {
-            &BasicValue::Byte(ref x) => x.dbus_encode(buf),
-            &BasicValue::Boolean(ref x) => x.dbus_encode(buf),
-            &BasicValue::Int16(ref x) => x.dbus_encode(buf),
-            &BasicValue::Uint16(ref x) => x.dbus_encode(buf),
-            &BasicValue::Int32(ref x) => x.dbus_encode(buf),
-            &BasicValue::Uint32(ref x) => x.dbus_encode(buf),
-            &BasicValue::Int64(ref x) => x.dbus_encode(buf),
-            &BasicValue::Uint64(ref x) => x.dbus_encode(buf),
-            &BasicValue::String(ref x) => x.dbus_encode(buf),
-            &BasicValue::ObjectPath(ref x) => x.dbus_encode(buf),
-            &BasicValue::Signature(ref x) => x.dbus_encode(buf),
+        match *self {
+            BasicValue::Byte(ref x) => x.dbus_encode(buf),
+            BasicValue::Boolean(ref x) => x.dbus_encode(buf),
+            BasicValue::Int16(ref x) => x.dbus_encode(buf),
+            BasicValue::Uint16(ref x) => x.dbus_encode(buf),
+            BasicValue::Int32(ref x) => x.dbus_encode(buf),
+            BasicValue::Uint32(ref x) => x.dbus_encode(buf),
+            BasicValue::Int64(ref x) => x.dbus_encode(buf),
+            BasicValue::Uint64(ref x) => x.dbus_encode(buf),
+            BasicValue::String(ref x) => x.dbus_encode(buf),
+            BasicValue::ObjectPath(ref x) => x.dbus_encode(buf),
+            BasicValue::Signature(ref x) => x.dbus_encode(buf),
         }
     }
 
@@ -323,13 +323,13 @@ impl BasicMarshal for BasicValue { }
 
 impl Marshal for Value {
     fn dbus_encode(&self, buf: &mut Vec<u8>) -> usize {
-        match self {
-            &Value::BasicValue(ref x) => x.dbus_encode(buf),
-            &Value::Double(ref x) => x.dbus_encode(buf),
-            &Value::Array(ref x) => x.objects.dbus_encode(buf),
-            &Value::Variant(ref x) => x.dbus_encode(buf),
-            &Value::Struct(ref x) => x.dbus_encode(buf),
-            &Value::Dictionary(ref x) => x.map.dbus_encode(buf)
+        match *self {
+            Value::BasicValue(ref x) => x.dbus_encode(buf),
+            Value::Double(ref x) => x.dbus_encode(buf),
+            Value::Array(ref x) => x.objects.dbus_encode(buf),
+            Value::Variant(ref x) => x.dbus_encode(buf),
+            Value::Struct(ref x) => x.dbus_encode(buf),
+            Value::Dictionary(ref x) => x.map.dbus_encode(buf)
         }
     }
 
