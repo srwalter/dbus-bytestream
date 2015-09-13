@@ -6,18 +6,19 @@
 //! use dbus_bytestream::connection::Connection;
 //! use dbus_bytestream::message;
 //!
-//! let mut conn = Connection::connect_system().unwrap();
-//! let mut msg = message::create_method_call(
+//! let conn = Connection::connect_system().unwrap();
+//! let msg = message::create_method_call(
 //!     "org.freedesktop.DBus", // destination
 //!     "/org/freedesktop/DBus", // path
 //!     "org.freedesktop.DBus", //interface
 //!     "ListNames" // method
 //! );
-//! let reply = conn.call_sync(&mut msg);
+//! let reply = conn.call_sync(msg);
 //! println!("{:?}", reply);
 //! ```
 //!
 
+use std::collections::VecDeque;
 use std::env;
 use std::net::{TcpStream,ToSocketAddrs};
 use std::io;
@@ -25,6 +26,7 @@ use std::io::{Read,Write};
 use std::fs::File;
 use std::ops::Deref;
 use std::path::Path;
+use std::cell::RefCell;
 use std::str::FromStr;
 use std::string;
 use std::num::ParseIntError;
@@ -55,9 +57,9 @@ enum Socket {
 }
 
 pub struct Connection {
-    sock: Socket,
-    next_serial: u32,
-    queue: Vec<Message>,
+    sock: RefCell<Socket>,
+    serial: RefCell<u32>,
+    queue: RefCell<VecDeque<Message>>,
 }
 
 #[derive(Debug)]
@@ -161,24 +163,28 @@ fn get_cookie(context: &str, cookie_id: &str) -> Result<String,Error> {
 }
 
 impl Connection {
-    fn get_sock(&mut self) -> &mut StreamSocket {
-        match self.sock {
-            Socket::Tcp(ref mut x) => x,
-            Socket::Uds(ref mut x) => x
+    fn run_sock<F, T>(&self, f: F) -> T
+        where F: FnOnce(&mut StreamSocket) -> T {
+        let mut sock = self.sock.borrow_mut();
+
+        match *sock {
+            Socket::Tcp(ref mut x) => f(x),
+            Socket::Uds(ref mut x) => f(x),
         }
     }
 
-    fn send_nul_byte(&mut self) -> Result<(),Error> {
+    fn sock_send_nul_byte(sock: &mut StreamSocket) -> Result<(),Error> {
         // Send NUL byte
-        let sock = self.get_sock();
         let buf = vec![0];
         try!(sock.write_all(&buf));
         Ok(())
     }
 
-    fn auth_anonymous(&mut self) -> Result<(),Error> {
-        let sock = self.get_sock();
+    fn send_nul_byte(&self) -> Result<(),Error> {
+        self.run_sock(Self::sock_send_nul_byte)
+    }
 
+    fn sock_auth_anonymous(sock: &mut StreamSocket) -> Result<(),Error> {
         try!(sock.write_all(b"AUTH ANONYMOUS 6c69626462757320312e382e3132\r\n"));
 
         // Read response
@@ -192,9 +198,11 @@ impl Connection {
         Ok(())
     }
 
-    fn auth_external(&mut self) -> Result<(),Error> {
-        let sock = self.get_sock();
+    fn auth_anonymous(&self) -> Result<(),Error> {
+        self.run_sock(Self::sock_auth_anonymous)
+    }
 
+    fn sock_auth_external(sock: &mut StreamSocket) -> Result<(),Error> {
         let uid = unsafe {
             libc::funcs::posix88::unistd::getuid()
         };
@@ -214,9 +222,11 @@ impl Connection {
         Ok(())
     }
 
-    fn auth_cookie(&mut self) -> Result<(),Error> {
-        let sock = self.get_sock();
+    fn auth_external(&self) -> Result<(),Error> {
+        self.run_sock(Self::sock_auth_external)
+    }
 
+    fn sock_auth_cookie(sock: &mut StreamSocket) -> Result<(),Error> {
         let uid = unsafe {
             libc::funcs::posix88::unistd::getuid()
         };
@@ -271,7 +281,11 @@ impl Connection {
         Ok(())
     }
 
-    fn authenticate(&mut self) -> Result<(),Error> {
+    fn auth_cookie(&self) -> Result<(),Error> {
+        self.run_sock(Self::sock_auth_cookie)
+    }
+
+    fn authenticate(&self) -> Result<(),Error> {
         try!(self.send_nul_byte());
         try!(self.auth_external()
               .or_else(|_x| { self.auth_cookie() })
@@ -279,12 +293,12 @@ impl Connection {
         self.say_hello()
     }
 
-    fn say_hello(&mut self) -> Result<(),Error> {
-        let mut msg = message::create_method_call("org.freedesktop.DBus",
-                                                  "/org/freedesktop/DBus",
-                                                  "org.freedesktop.DBus",
-                                                  "Hello");
-        try!(self.call_sync(&mut msg));
+    fn say_hello(&self) -> Result<(),Error> {
+        let msg = message::create_method_call("org.freedesktop.DBus",
+                                              "/org/freedesktop/DBus",
+                                              "org.freedesktop.DBus",
+                                              "Hello");
+        try!(self.call_sync(msg));
         Ok(())
     }
 
@@ -329,10 +343,10 @@ impl Connection {
     /// addr.
     pub fn connect_uds<P: AsRef<Path>>(addr: P) -> Result<Connection,Error> {
         let sock = try!(UnixStream::connect(addr));
-        let mut conn = Connection {
-            sock: Socket::Uds(sock),
-            queue: Vec::new(),
-            next_serial: 1
+        let conn = Connection {
+            sock: RefCell::new(Socket::Uds(sock)),
+            queue: RefCell::new(VecDeque::new()),
+            serial: RefCell::new(1)
         };
 
         try!(conn.authenticate());
@@ -343,31 +357,53 @@ impl Connection {
     /// port to connect to.
     pub fn connect_tcp<T: ToSocketAddrs>(addr: T) -> Result<Connection,Error> {
         let sock = try!(TcpStream::connect(addr));
-        let mut conn = Connection {
-            sock: Socket::Tcp(sock),
-            queue: Vec::new(),
-            next_serial: 1
+        let conn = Connection {
+            sock: RefCell::new(Socket::Tcp(sock)),
+            queue: RefCell::new(VecDeque::new()),
+            serial: RefCell::new(1)
         };
 
         try!(conn.authenticate());
         Ok(conn)
     }
 
-    /// Sends a message over the connection.  The Message can be created by one of the functions
-    /// from the message module, such as message::create_method_call .  On success, returns the
-    /// serial number of the outgoing message so that the reply can be identified.
-    pub fn send(&mut self, mbuf: &mut Message) -> Result<u32, Error> {
-        let this_serial = self.next_serial;
-        self.next_serial += 1;
-        mbuf.serial = this_serial;
+    fn next_serial(&self) -> u32 {
+        let mut serial = self.serial.borrow_mut();
+        let current_serial = *serial;
+        *serial = current_serial + 1;
+        current_serial
+    }
 
+    fn sock_send(sock: &mut StreamSocket, mbuf: Message) -> Result<(), Error> {
         let mut msg = Vec::new();
         mbuf.dbus_encode(&mut msg);
 
-        let sock = self.get_sock();
         try!(sock.write_all(&msg));
         try!(sock.write_all(&mbuf.body));
+        Ok(())
+    }
+
+    /// Sends a message over the connection.  The Message can be created by one of the functions
+    /// from the message module, such as message::create_method_call .  On success, returns the
+    /// serial number of the outgoing message so that the reply can be identified.
+    pub fn send(&self, mut mbuf: Message) -> Result<u32, Error> {
+        let this_serial = self.next_serial();
+        mbuf.serial = this_serial;
+
+        try!(self.run_sock(move |sock| {
+            Self::sock_send(sock, mbuf)
+        }));
         Ok(this_serial)
+    }
+
+    fn push_queue(&self, queue: &mut VecDeque<Message>) {
+        let mut master_queue = self.queue.borrow_mut();
+
+        while !queue.is_empty() {
+            master_queue.push_front(queue.pop_front().unwrap());
+        }
+        //#![feature(append)]
+        //self.queue.borrow_mut().append(queue)
     }
 
     /// Sends a message over a connection and block until a reply is received.  This is only valid
@@ -377,13 +413,13 @@ impl Connection {
     /// # Panics
     /// Calling this function with a Message for other than METHOD_CALL or with the
     /// NO_REPLY_EXPECTED flag set is a programming error and will panic.
-    pub fn call_sync(&mut self, mbuf: &mut Message) -> Result<Option<Vec<Value>>,Error> {
+    pub fn call_sync(&self, mbuf: Message) -> Result<Option<Vec<Value>>,Error> {
         assert_eq!(mbuf.message_type, message::MESSAGE_TYPE_METHOD_CALL);
         assert_eq!(mbuf.flags & message::FLAGS_NO_REPLY_EXPECTED, 0);
         let serial = try!(self.send(mbuf));
         // We need a local queue so that read_msg doesn't just give us
         // the same one over and over
-        let mut queue = Vec::new();
+        let mut queue = VecDeque::new();
         loop {
             let mut msg = try!(self.read_msg());
             match msg.headers.iter().position(|x| { x.0 == message::HEADER_FIELD_REPLY_SERIAL }) {
@@ -395,26 +431,22 @@ impl Connection {
                     let reply_serial : u32 = DBusDecoder::decode(obj).unwrap();
                     if reply_serial == serial {
                         // Move our queued messages into the Connection's queue
-                        for _ in 0..queue.len() {
-                            self.queue.push(queue.remove(0));
-                        }
+                        self.push_queue(&mut queue);
                         return Ok(try!(msg.get_body()))
                     };
                 }
                 _ => ()
             };
-            queue.push(msg);
+            queue.push_back(msg);
         }
     }
 
-    /// Blocks until a message comes in from the message bus.  The received message is returned.
-    pub fn read_msg(&mut self) -> Result<Message,Error> {
-        match self.queue.get(0) {
-            Some(_) => return Ok(self.queue.remove(0)),
-            _ => ()
-        };
+    fn pop_message(&self) -> Option<Message> {
+        self.queue.borrow_mut().pop_front()
+    }
+
+    fn sock_read_msg(sock: &mut StreamSocket) -> Result<Message,Error> {
         let mut buf = Vec::new();
-        let sock = self.get_sock();
 
         // Read and demarshal the fixed portion of the header
         try!(read_exactly(sock, &mut buf, 12));
@@ -487,13 +519,21 @@ impl Connection {
 
         Ok(msg)
     }
+
+    /// Blocks until a message comes in from the message bus.  The received message is returned.
+    pub fn read_msg(&self) -> Result<Message,Error> {
+        match self.pop_message() {
+            Some(m) => Ok(m),
+            _ => self.run_sock(Self::sock_read_msg)
+        }
+    }
 }
 
 #[cfg(test)]
 fn validate_connection(conn: &mut Connection) {
-    let mut msg = message::create_method_call("org.freedesktop.DBus", "/org/freedesktop/DBus",
+    let msg = message::create_method_call("org.freedesktop.DBus", "/org/freedesktop/DBus",
                                           "org.freedesktop.DBus", "ListNames");
-    let resp = conn.call_sync(&mut msg).unwrap();
+    let resp = conn.call_sync(msg).unwrap();
     println!("ListNames: {:?}", resp);
 }
 
@@ -512,7 +552,7 @@ fn test_connect_session() {
     msg = msg.add_arg(&"com.test.foobar")
              .add_arg(&(0 as u32));
     println!("{:?}", msg);
-    let mut resp = conn.call_sync(&mut msg).unwrap().unwrap();
+    let mut resp = conn.call_sync(msg).unwrap().unwrap();
     println!("RequestName: {:?}", resp);
     let value = resp.remove(0);
     assert_eq!(value, Value::from(1 as u32));
@@ -520,10 +560,10 @@ fn test_connect_session() {
 
 #[test]
 fn test_tcp() {
-    let mut conn = Connection::connect(&env::var("DBUS_TCP_BUS_ADDRESS").unwrap()).unwrap();
-    let mut msg = message::create_method_call("org.freedesktop.DBus", "/org/freedesktop/DBus",
+    let conn = Connection::connect(&env::var("DBUS_TCP_BUS_ADDRESS").unwrap()).unwrap();
+    let msg = message::create_method_call("org.freedesktop.DBus", "/org/freedesktop/DBus",
                                           "org.freedesktop.DBus", "ListNames");
-    conn.send(&mut msg).ok();
+    conn.send(msg).ok();
     let msg = conn.read_msg().unwrap();
     println!("{:?}", msg.body);
     //loop {
