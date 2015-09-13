@@ -42,7 +42,7 @@ impl Marshal for HeaderField {
         buf.len() - start_len
     }
     fn get_type(&self) -> String {
-        "(yv)".to_string()
+        "(yv)".to_owned()
     }
 }
 
@@ -92,7 +92,7 @@ pub fn create_method_call (dest: &str, path: &str, iface: &str, method: &str) ->
     }.add_header(HEADER_FIELD_DESTINATION,
                  Variant::new(Value::from(dest), "s"))
      .add_header(HEADER_FIELD_PATH,
-                 Variant::new(Value::BasicValue(BasicValue::ObjectPath(Path(path.to_string()))), "o"))
+                 Variant::new(Value::BasicValue(BasicValue::ObjectPath(Path(path.to_owned()))), "o"))
      .add_header(HEADER_FIELD_INTERFACE,
                  Variant::new(Value::from(iface), "s"))
      .add_header(HEADER_FIELD_MEMBER,
@@ -143,7 +143,7 @@ pub fn create_signal(path: &str, interface: &str, member: &str) -> Message {
         headers: Vec::new(),
         body: Vec::new(),
     }.add_header(HEADER_FIELD_PATH,
-                 Variant::new(Value::BasicValue(BasicValue::ObjectPath(Path(path.to_string()))), "o"))
+                 Variant::new(Value::BasicValue(BasicValue::ObjectPath(Path(path.to_owned()))), "o"))
      .add_header(HEADER_FIELD_INTERFACE,
                  Variant::new(Value::from(interface), "s"))
      .add_header(HEADER_FIELD_MEMBER,
@@ -166,7 +166,7 @@ impl Message {
     pub fn add_arg(mut self, arg: &Marshal) -> Message {
         match self.get_header(HEADER_FIELD_SIGNATURE) {
             None => {
-                let value = Value::BasicValue(BasicValue::Signature(Signature("".to_string())));
+                let value = Value::BasicValue(BasicValue::Signature(Signature("".to_owned())));
                 let variant = Variant::new(value, "g");
                 self = self.add_header(HEADER_FIELD_SIGNATURE, variant);
             },
@@ -214,7 +214,7 @@ impl Message {
             _ => return Ok(None)
         };
 
-        let mut sig = "(".to_string() + &sigval.0 + ")";
+        let mut sig = "(".to_owned() + &sigval.0 + ")";
         let mut offset = 0;
         match try!(demarshal(&mut self.body, &mut offset, &mut sig)) {
             Value::Struct(x) => Ok(Some(x.objects)),

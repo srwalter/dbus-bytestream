@@ -79,7 +79,7 @@ impl Marshal for u8 {
         1
     }
     fn get_type (&self) -> String {
-        "y".to_string()
+        "y".to_owned()
     }
 }
 
@@ -94,7 +94,7 @@ impl Marshal for bool {
         marshal_int(val, 4, buf)
     }
     fn get_type (&self) -> String {
-        "b".to_string()
+        "b".to_owned()
     }
 }
 impl BasicMarshal for bool { }
@@ -104,7 +104,7 @@ impl Marshal for i16 {
         marshal_int(*self as u64, 2, buf)
     }
     fn get_type (&self) -> String {
-        "n".to_string()
+        "n".to_owned()
     }
 }
 impl BasicMarshal for i16 { }
@@ -114,7 +114,7 @@ impl Marshal for u16 {
         marshal_int(*self as u64, 2, buf)
     }
     fn get_type (&self) -> String {
-        "q".to_string()
+        "q".to_owned()
     }
 }
 impl BasicMarshal for u16 { }
@@ -124,7 +124,7 @@ impl Marshal for i32 {
         marshal_int(*self as u64, 4, buf)
     }
     fn get_type (&self) -> String {
-        "i".to_string()
+        "i".to_owned()
     }
 }
 impl BasicMarshal for i32 { }
@@ -134,7 +134,7 @@ impl Marshal for u32 {
         marshal_int(*self as u64, 4, buf)
     }
     fn get_type (&self) -> String {
-        "u".to_string()
+        "u".to_owned()
     }
 }
 impl BasicMarshal for u32 { }
@@ -144,7 +144,7 @@ impl Marshal for i64 {
         marshal_int(*self as u64, 8, buf)
     }
     fn get_type (&self) -> String {
-        "x".to_string()
+        "x".to_owned()
     }
 }
 impl BasicMarshal for i64 { }
@@ -154,7 +154,7 @@ impl Marshal for u64 {
         marshal_int(*self as u64, 8, buf)
     }
     fn get_type (&self) -> String {
-        "t".to_string()
+        "t".to_owned()
     }
 }
 impl BasicMarshal for u64 { }
@@ -164,45 +164,45 @@ impl Marshal for f64 {
         marshal_double(*self, buf)
     }
     fn get_type (&self) -> String {
-        "d".to_string()
+        "d".to_owned()
     }
 }
 impl BasicMarshal for f64 { }
 
 impl<'a> Marshal for &'a str {
     fn dbus_encode(&self, buf: &mut Vec<u8>) -> usize {
-        marshal_string(self.to_string(), buf)
+        marshal_string((*self).to_owned(), buf)
     }
     fn get_type (&self) -> String {
-        "s".to_string()
+        "s".to_owned()
     }
 }
 impl<'a> Marshal for String {
     fn dbus_encode(&self, buf: &mut Vec<u8>) -> usize {
-        marshal_string(self.to_string(), buf)
+        marshal_string(self.to_owned(), buf)
     }
     fn get_type (&self) -> String {
-        "s".to_string()
+        "s".to_owned()
     }
 }
 impl<'a> BasicMarshal for &'a str { }
 
 impl Marshal for Path {
     fn dbus_encode(&self, buf: &mut Vec<u8>) -> usize {
-        marshal_string(self.0.to_string(), buf)
+        marshal_string(self.0.to_owned(), buf)
     }
     fn get_type (&self) -> String {
-        "o".to_string()
+        "o".to_owned()
     }
 }
 impl BasicMarshal for Path { }
 
 impl Marshal for Signature {
     fn dbus_encode(&self, buf: &mut Vec<u8>) -> usize {
-        marshal_signature(self.0.to_string(), buf)
+        marshal_signature(self.0.to_owned(), buf)
     }
     fn get_type (&self) -> String {
-        "o".to_string()
+        "o".to_owned()
     }
 }
 impl BasicMarshal for Signature { }
@@ -218,7 +218,7 @@ impl Marshal for Struct {
     }
 
     fn get_type(&self) -> String {
-        self.signature.0.to_string()
+        self.signature.0.to_owned()
     }
 }
 
@@ -243,7 +243,7 @@ impl<T: Marshal> Marshal for Vec<T> {
         (array_len as usize) + 4
     }
     fn get_type(&self) -> String {
-        "a".to_string() + &(self.iter().next().unwrap().get_type())
+        "a".to_owned() + &(self.iter().next().unwrap().get_type())
     }
 }
 
@@ -263,7 +263,7 @@ impl<K,V> Marshal for DictEntry<K, V>
         buf.len() - start_len
     }
     fn get_type(&self) -> String {
-        "{".to_string() + &self.key.get_type() + &self.value.get_type() + "}"
+        "{".to_owned() + &self.key.get_type() + &self.value.get_type() + "}"
     }
 }
 
@@ -279,7 +279,7 @@ impl<K,V> Marshal for HashMap<K, V>
         array.dbus_encode(buf)
     }
     fn get_type(&self) -> String {
-        "a".to_string() + "{" + &self.keys().next().unwrap().get_type() + &self.values().next().unwrap().get_type() + "}"
+        "a".to_owned() + "{" + &self.keys().next().unwrap().get_type() + &self.values().next().unwrap().get_type() + "}"
     }
 }
 
@@ -293,7 +293,7 @@ impl Marshal for Variant {
         len + buf.len() - old_len
     }
     fn get_type(&self) -> String {
-        "v".to_string()
+        "v".to_owned()
     }
 }
 
@@ -315,7 +315,7 @@ impl Marshal for BasicValue {
     }
 
     fn get_type(&self) -> String {
-        self.get_signature().to_string()
+        self.get_signature().to_owned()
     }
 }
 
@@ -334,7 +334,7 @@ impl Marshal for Value {
     }
 
     fn get_type(&self) -> String {
-        self.get_signature().to_string()
+        self.get_signature().to_owned()
     }
 }
 
@@ -383,7 +383,7 @@ fn test_array () {
 fn test_variant () {
     let v = Variant{
         object: Box::new(Value::BasicValue(BasicValue::Uint32(42))),
-        signature: Signature("u".to_string())
+        signature: Signature("u".to_owned())
     };
     assert_eq!(v.get_type(), "v");
     let v_bytes = vec![1, 'u' as u8, 0, 0, 42, 0, 0, 0];
