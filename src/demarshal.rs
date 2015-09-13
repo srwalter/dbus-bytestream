@@ -3,7 +3,7 @@ use std::mem::transmute;
 
 use dbus_serialize::types::{Value,BasicValue,Path,Signature,Struct,Variant,Array,Dictionary};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum DemarshalError {
     MessageTooShort,
     CorruptedMessage,
