@@ -181,7 +181,7 @@ impl Message {
             self = self.add_header(HEADER_FIELD_SIGNATURE, variant);
         };
         {
-            let b : &mut Box<Value> = &mut self.get_header(HEADER_FIELD_SIGNATURE).unwrap().object;
+            let b : &mut Box<Value> = &mut self.get_header_mut(HEADER_FIELD_SIGNATURE).unwrap().object;
             let val : &mut Value = b.deref_mut();
             match *val {
                 Value::BasicValue(BasicValue::Signature(ref mut s)) => s.0.push_str(&arg.get_type()),
@@ -192,7 +192,12 @@ impl Message {
         self
     }
 
-    pub fn get_header(&mut self, name: u8) -> Option<&mut Variant> {
+    pub fn get_header(&self, name: u8) -> Option<&Variant> {
+        self.headers.iter().position(|x| { x.0 == name })
+            .map(|idx| &self.headers[idx].1)
+    }
+
+    pub fn get_header_mut(&mut self, name: u8) -> Option<&mut Variant> {
         match self.headers.iter().position(|x| { x.0 == name }) {
             Some(idx) => Some(&mut self.headers[idx].1),
             _ => None
