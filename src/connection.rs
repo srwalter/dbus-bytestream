@@ -119,7 +119,7 @@ fn read_exactly(sock: &mut StreamSocket, buf: &mut Vec<u8>, len: usize) -> Resul
 }
 
 fn read_line(sock: &mut StreamSocket) -> Result<String,Error> {
-    let mut line = "".to_string();
+    let mut line = "".to_owned();
     let mut last = '\0';
 
     loop {
@@ -156,7 +156,7 @@ fn get_cookie(context: &str, cookie_id: &str) -> Result<String,Error> {
         if words.len() != 3 {
             break;
         }
-        return Ok(words[2].to_string());
+        return Ok(words[2].to_owned());
     }
 
     Err(Error::AuthFailed)
@@ -208,7 +208,7 @@ impl Connection {
         };
         let uid_str = uid.to_string();
         let uid_hex = uid_str.into_bytes().to_hex();
-        let cmd = "AUTH EXTERNAL ".to_string() + &uid_hex + "\r\n";
+        let cmd = "AUTH EXTERNAL ".to_owned() + &uid_hex + "\r\n";
         try!(sock.write_all(&cmd.into_bytes()));
 
         // Read response
@@ -232,7 +232,7 @@ impl Connection {
         };
         let uid_str = uid.to_string();
         let uid_hex = uid_str.into_bytes().to_hex();
-        let cmd = "AUTH DBUS_COOKIE_SHA1 ".to_string() + &uid_hex + "\r\n";
+        let cmd = "AUTH DBUS_COOKIE_SHA1 ".to_owned() + &uid_hex + "\r\n";
         try!(sock.write_all(&cmd.into_bytes()));
 
         // Read response
@@ -260,14 +260,14 @@ impl Connection {
         }
         let hex_challenge = my_challenge.to_hex();
 
-        let my_cookie = words[2].to_string() + ":" + &hex_challenge + ":" + &cookie;
+        let my_cookie = words[2].to_owned() + ":" + &hex_challenge + ":" + &cookie;
         let mut hasher = crypto::sha1::Sha1::new();
         hasher.input_str(&my_cookie);
         let hash = hasher.result_str();
 
         let my_resp = hex_challenge + " " + &hash;
         let hex_resp = my_resp.into_bytes().to_hex();
-        let buf = "DATA ".to_string() + &hex_resp + "\r\n";
+        let buf = "DATA ".to_owned() + &hex_resp + "\r\n";
         try!(sock.write_all(&buf.into_bytes()));
 
         // Read response
@@ -422,20 +422,17 @@ impl Connection {
         let mut queue = VecDeque::new();
         loop {
             let mut msg = try!(self.read_msg());
-            match msg.headers.iter().position(|x| { x.0 == message::HEADER_FIELD_REPLY_SERIAL }) {
-                Some(idx) => {
-                    let obj = {
-                        let x = &msg.headers[idx].1;
-                        x.object.deref().clone()
-                    };
-                    let reply_serial : u32 = DBusDecoder::decode(obj).unwrap();
-                    if reply_serial == serial {
-                        // Move our queued messages into the Connection's queue
-                        self.push_queue(&mut queue);
-                        return Ok(try!(msg.get_body()))
-                    };
-                }
-                _ => ()
+            if let Some(idx) = msg.headers.iter().position(|x| { x.0 == message::HEADER_FIELD_REPLY_SERIAL }) {
+                let obj = {
+                    let x = &msg.headers[idx].1;
+                    x.object.deref().clone()
+                };
+                let reply_serial : u32 = DBusDecoder::decode(obj).unwrap();
+                if reply_serial == serial {
+                    // Move our queued messages into the Connection's queue
+                    self.push_queue(&mut queue);
+                    return Ok(try!(msg.get_body()))
+                };
             };
             queue.push_back(msg);
         }
@@ -451,7 +448,7 @@ impl Connection {
         // Read and demarshal the fixed portion of the header
         try!(read_exactly(sock, &mut buf, 12));
         let mut offset = 0;
-        let mut sig = "(yyyyuu)".to_string();
+        let mut sig = "(yyyyuu)".to_owned();
         let header = match try!(demarshal(&mut buf, &mut offset, &mut sig)) {
             Value::Struct(x) => x,
             x => panic!("Demarshal didn't return what we asked for: {:?}", x)
@@ -474,7 +471,7 @@ impl Connection {
         // demarshal consumes the buf, so save a copy for when we demarshal the entire array
         let mut buf_copy = buf.clone();
         offset = 12;
-        sig = "u".to_string();
+        sig = "u".to_owned();
         let data = demarshal(&mut buf, &mut offset, &mut sig).ok().unwrap();
         let arr_len = DBusDecoder::decode::<u32>(data).unwrap() as usize;
 
@@ -485,7 +482,7 @@ impl Connection {
         };
 
         offset = 12;
-        sig = "a(yv)".to_string();
+        sig = "a(yv)".to_owned();
         let header_fields = match try!(demarshal(&mut buf_copy, &mut offset, &mut sig)) {
             Value::Array(x) => x,
             x => panic!("Demarshal didn't return what we asked for: {:?}", x)

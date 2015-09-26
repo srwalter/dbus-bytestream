@@ -63,7 +63,7 @@ pub type ServerAddressError = (Error, String);
 
 impl From<UnescapeError> for ServerAddressError {
     fn from(e: UnescapeError) -> Self {
-        (Error::UnescapeError(e), "".to_string())
+        (Error::UnescapeError(e), "".to_owned())
     }
 }
 
@@ -98,7 +98,7 @@ impl<'a> Iterator for AddrKeyVals<'a> {
         }
         let mut keyval = kvs.unwrap().split('=');
         if keyval.clone().count() != 2 {
-            return Some(Err((Error::MalformedKeyValue, kvs.unwrap().to_string())));
+            return Some(Err((Error::MalformedKeyValue, kvs.unwrap().to_owned())));
         }
 
         let key = dbus_unescape_str(keyval.next().unwrap());
@@ -144,7 +144,7 @@ impl FromStr for UnixAddress {
                         path = Some(kv.1);
                     } else {
                         return Err((Error::ConflictingOptions,
-                                    "Duplicate path/abstract specified".to_string()));
+                                    "Duplicate path/abstract specified".to_owned()));
                     }
                 },
                 "guid" => {}, // Ignore for now
@@ -155,11 +155,11 @@ impl FromStr for UnixAddress {
             }
         }
         if path == None {
-            Err((Error::MissingOption, "No path for unix socket".to_string()))
+            Err((Error::MissingOption, "No path for unix socket".to_owned()))
         } else {
             let mut path = path.unwrap();
             if abs {
-                path = "\0".to_string() + &path;
+                path = "\0".to_owned() + &path;
             }
             Ok(UnixAddress { path: PathBuf::from(path) })
         }
@@ -197,7 +197,7 @@ impl FromStr for TcpAddress {
                         host = Some(kv.1);
                     } else {
                         return Err((Error::ConflictingOptions,
-                                    "Duplicate host specified".to_string()));
+                                    "Duplicate host specified".to_owned()));
                     }
                 },
                 "port" => {
@@ -205,7 +205,7 @@ impl FromStr for TcpAddress {
                         port = Some(kv.1);
                     } else {
                         return Err((Error::ConflictingOptions,
-                                    "Duplicate port specified".to_string()));
+                                    "Duplicate port specified".to_owned()));
                     }
                 },
                 "guid" => {}, // Ignore for now
@@ -213,9 +213,9 @@ impl FromStr for TcpAddress {
             }
         }
         if host == None {
-            Err((Error::MissingOption, "No host for tcp socket".to_string()))
+            Err((Error::MissingOption, "No host for tcp socket".to_owned()))
         } else if port == None {
-            Err((Error::MissingOption, "No port for tcp socket".to_string()))
+            Err((Error::MissingOption, "No port for tcp socket".to_owned()))
         } else {
             Ok(TcpAddress { host: host.unwrap(), port: port.unwrap() })
         }
@@ -234,7 +234,7 @@ impl FromStr for ServerAddress {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut sp = s.split(':');
         if sp.clone().count() != 2 {
-            return Err((Error::BadTransportSeparator, s.to_string()));
+            return Err((Error::BadTransportSeparator, s.to_owned()));
         }
         // Unwrap is ok because we just checked that there are two elements
         let transport = sp.next().unwrap();
@@ -243,7 +243,7 @@ impl FromStr for ServerAddress {
         match transport {
             "unix" => Ok(ServerAddress::Unix(try!(UnixAddress::from_str(opts)))),
             "tcp" => Ok(ServerAddress::Tcp(try!(TcpAddress::from_str(opts)))),
-            _ => Err((Error::UnknownTransport, transport.to_string())),
+            _ => Err((Error::UnknownTransport, transport.to_owned())),
         }
     }
 }

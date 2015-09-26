@@ -42,7 +42,7 @@ impl Marshal for HeaderField {
         buf.len() - start_len
     }
     fn get_type(&self) -> String {
-        "(yv)".to_string()
+        "(yv)".to_owned()
     }
 }
 
@@ -92,7 +92,7 @@ pub fn create_method_call (dest: &str, path: &str, iface: &str, method: &str) ->
     }.add_header(HEADER_FIELD_DESTINATION,
                  Variant::new(Value::from(dest), "s"))
      .add_header(HEADER_FIELD_PATH,
-                 Variant::new(Value::BasicValue(BasicValue::ObjectPath(Path(path.to_string()))), "o"))
+                 Variant::new(Value::BasicValue(BasicValue::ObjectPath(Path(path.to_owned()))), "o"))
      .add_header(HEADER_FIELD_INTERFACE,
                  Variant::new(Value::from(iface), "s"))
      .add_header(HEADER_FIELD_MEMBER,
@@ -143,7 +143,7 @@ pub fn create_signal(path: &str, interface: &str, member: &str) -> Message {
         headers: Vec::new(),
         body: Vec::new(),
     }.add_header(HEADER_FIELD_PATH,
-                 Variant::new(Value::BasicValue(BasicValue::ObjectPath(Path(path.to_string()))), "o"))
+                 Variant::new(Value::BasicValue(BasicValue::ObjectPath(Path(path.to_owned()))), "o"))
      .add_header(HEADER_FIELD_INTERFACE,
                  Variant::new(Value::from(interface), "s"))
      .add_header(HEADER_FIELD_MEMBER,
@@ -164,19 +164,16 @@ impl Message {
     ///     .add_arg(&"string");
     /// ```
     pub fn add_arg(mut self, arg: &Marshal) -> Message {
-        match self.get_header(HEADER_FIELD_SIGNATURE) {
-            None => {
-                let value = Value::BasicValue(BasicValue::Signature(Signature("".to_string())));
-                let variant = Variant::new(value, "g");
-                self = self.add_header(HEADER_FIELD_SIGNATURE, variant);
-            },
-            _ => ()
+        if let None = self.get_header(HEADER_FIELD_SIGNATURE) {
+            let value = Value::BasicValue(BasicValue::Signature(Signature("".to_owned())));
+            let variant = Variant::new(value, "g");
+            self = self.add_header(HEADER_FIELD_SIGNATURE, variant);
         };
         {
             let b : &mut Box<Value> = &mut self.get_header(HEADER_FIELD_SIGNATURE).unwrap().object;
             let val : &mut Value = b.deref_mut();
-            match val {
-                &mut Value::BasicValue(BasicValue::Signature(ref mut s)) => s.0.push_str(&arg.get_type()),
+            match *val {
+                Value::BasicValue(BasicValue::Signature(ref mut s)) => s.0.push_str(&arg.get_type()),
                 _ => panic!("Garbage in signature field")
             };
         }
@@ -199,7 +196,7 @@ impl Message {
     /// Get the sequence of Values from out of a Message.  Returns None if the message doesn't have
     /// a body.
     pub fn get_body(&mut self) -> Result<Option<Vec<Value>>,DemarshalError> {
-        if self.body.len() == 0 {
+        if self.body.is_empty() {
             return Ok(None);
         }
 
@@ -214,7 +211,7 @@ impl Message {
             _ => return Ok(None)
         };
 
-        let mut sig = "(".to_string() + &sigval.0 + ")";
+        let mut sig = "(".to_owned() + &sigval.0 + ")";
         let mut offset = 0;
         match try!(demarshal(&mut self.body, &mut offset, &mut sig)) {
             Value::Struct(x) => Ok(Some(x.objects)),

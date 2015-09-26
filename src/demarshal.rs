@@ -41,7 +41,7 @@ fn demarshal_byte(buf: &mut Vec<u8>, offset: &mut usize) -> Result<Value,Demarsh
     }
     let byte = buf.remove(0);
     *offset += 1;
-    return Ok(Value::BasicValue(BasicValue::Byte(byte)))
+    Ok(Value::BasicValue(BasicValue::Byte(byte)))
 }
 
 fn align_to(buf: &mut Vec<u8>, offset: &mut usize, align: usize) -> Result<(),DemarshalError> {
@@ -150,11 +150,7 @@ fn demarshal_array(buf: &mut Vec<u8>, offset: &mut usize, sig: &mut String) -> R
         return Err(DemarshalError::BadSignature);
     }
     let typ = sig.chars().next().unwrap();
-    let is_dict = if typ == '{' {
-        true
-    } else {
-        false
-    };
+    let is_dict = typ == '{';
     // demarshal_int ensure we're correctly aligned with input
     let array_len = match demarshal_int(buf, offset, 4, false) {
         Ok(Value::BasicValue(BasicValue::Uint32(x))) => x,
@@ -170,10 +166,10 @@ fn demarshal_array(buf: &mut Vec<u8>, offset: &mut usize, sig: &mut String) -> R
 
     let mut vec = Vec::new();
     let start_offset = *offset;
-    let mut sig_copy = "".to_string();
+    let mut sig_copy = "".to_owned();
     while *offset < start_offset+(array_len as usize) {
         // We want to pass the same signature to each call of demarshal
-        sig_copy = sig.to_string();
+        sig_copy = sig.to_owned();
         vec.push(try!(demarshal(buf, offset, &mut sig_copy)));
     }
     // Now that we're done with our elements we can forget the elements consumed by demarshal
@@ -190,8 +186,8 @@ fn demarshal_array(buf: &mut Vec<u8>, offset: &mut usize, sig: &mut String) -> R
                 _ => panic!("Dictionaries should contain structs")
             };
             let val = s.objects.remove(1);
-            let key = match &s.objects[0] {
-                &Value::BasicValue(ref x) => x,
+            let key = match s.objects[0] {
+                Value::BasicValue(ref x) => x,
                 _ => panic!("Dictionaries require BasicValue keys")
             };
             map.insert(key.clone(), val);
@@ -209,7 +205,7 @@ fn demarshal_struct(buf: &mut Vec<u8>, offset: &mut usize, sig: &mut String) -> 
     try!(align_to(buf, offset, 8));
 
     let mut vec = Vec::new();
-    let mut mysig = sig.to_string();
+    let mut mysig = sig.to_owned();
     loop {
         let typ = match sig.chars().next() {
             Some(x) => x,
@@ -233,13 +229,13 @@ fn demarshal_struct(buf: &mut Vec<u8>, offset: &mut usize, sig: &mut String) -> 
 }
 
 fn demarshal_variant(buf: &mut Vec<u8>, offset: &mut usize) -> Result<Value,DemarshalError> {
-    let mut variant_sig = "g".to_string();
+    let mut variant_sig = "g".to_owned();
     let sigval = try!(demarshal(buf, offset, &mut variant_sig));
     let sig = match sigval {
         Value::BasicValue(BasicValue::Signature(x)) => x,
         _ => return Err(DemarshalError::CorruptedMessage)
     };
-    let mut s = sig.0.to_string();
+    let mut s = sig.0.to_owned();
     let var = try!(demarshal(buf, offset, &mut s));
     Ok(Value::Variant(Variant{
         object: Box::new(var),
