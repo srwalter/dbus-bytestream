@@ -421,7 +421,7 @@ impl Connection {
         // the same one over and over
         let mut queue = VecDeque::new();
         loop {
-            let mut msg = try!(self.read_msg());
+            let msg = try!(self.read_msg());
             if let Some(idx) = msg.headers.iter().position(|x| { x.0 == message::HEADER_FIELD_REPLY_SERIAL }) {
                 let obj = {
                     let x = &msg.headers[idx].1;

@@ -1,5 +1,6 @@
 //! Functions for creating and modifying messages to send across the message bus.
 use std::ops::DerefMut;
+use std::cell::RefCell;
 
 use dbus_serialize::types::{Path,Variant,Value,BasicValue,Signature};
 
@@ -55,7 +56,9 @@ pub struct Message {
     pub version: u8,
     pub serial: u32,
     pub headers: Vec<HeaderField>,
-    pub body: Vec<u8>
+    pub body: Vec<u8>,
+
+    body_cache: RefCell<Option<Result<Option<Vec<Value>>, DemarshalError>>>
 }
 
 impl Marshal for Message {
@@ -89,6 +92,8 @@ pub fn create_method_call (dest: &str, path: &str, iface: &str, method: &str) ->
         serial: 0,
         headers: Vec::new(),
         body: Vec::new(),
+
+        body_cache: RefCell::new(None),
     }.add_header(HEADER_FIELD_DESTINATION,
                  Variant::new(Value::from(dest), "s"))
      .add_header(HEADER_FIELD_PATH,
@@ -110,6 +115,8 @@ pub fn create_method_return(reply_serial: u32) -> Message {
         serial: 0,
         headers: Vec::new(),
         body: Vec::new(),
+
+        body_cache: RefCell::new(None),
     }.add_header(HEADER_FIELD_REPLY_SERIAL,
                  Variant::new(Value::from(reply_serial), "u"))
 }
@@ -125,6 +132,8 @@ pub fn create_error(error_name: &str, reply_serial: u32) -> Message {
         serial: 0,
         headers: Vec::new(),
         body: Vec::new(),
+
+        body_cache: RefCell::new(None),
     }.add_header(HEADER_FIELD_REPLY_SERIAL,
                  Variant::new(Value::from(reply_serial), "u"))
      .add_header(HEADER_FIELD_ERROR_NAME,
@@ -142,6 +151,8 @@ pub fn create_signal(path: &str, interface: &str, member: &str) -> Message {
         serial: 0,
         headers: Vec::new(),
         body: Vec::new(),
+
+        body_cache: RefCell::new(None),
     }.add_header(HEADER_FIELD_PATH,
                  Variant::new(Value::BasicValue(BasicValue::ObjectPath(Path(path.to_owned()))), "o"))
      .add_header(HEADER_FIELD_INTERFACE,
@@ -170,7 +181,7 @@ impl Message {
             self = self.add_header(HEADER_FIELD_SIGNATURE, variant);
         };
         {
-            let b : &mut Box<Value> = &mut self.get_header(HEADER_FIELD_SIGNATURE).unwrap().object;
+            let b : &mut Box<Value> = &mut self.get_header_mut(HEADER_FIELD_SIGNATURE).unwrap().object;
             let val : &mut Value = b.deref_mut();
             match *val {
                 Value::BasicValue(BasicValue::Signature(ref mut s)) => s.0.push_str(&arg.get_type()),
@@ -181,7 +192,12 @@ impl Message {
         self
     }
 
-    pub fn get_header(&mut self, name: u8) -> Option<&mut Variant> {
+    pub fn get_header(&self, name: u8) -> Option<&Variant> {
+        self.headers.iter().position(|x| { x.0 == name })
+            .map(|idx| &self.headers[idx].1)
+    }
+
+    pub fn get_header_mut(&mut self, name: u8) -> Option<&mut Variant> {
         match self.headers.iter().position(|x| { x.0 == name }) {
             Some(idx) => Some(&mut self.headers[idx].1),
             _ => None
@@ -195,28 +211,34 @@ impl Message {
 
     /// Get the sequence of Values from out of a Message.  Returns None if the message doesn't have
     /// a body.
-    pub fn get_body(&mut self) -> Result<Option<Vec<Value>>,DemarshalError> {
+    pub fn get_body(&self) -> Result<Option<Vec<Value>>,DemarshalError> {
         if self.body.is_empty() {
             return Ok(None);
         }
+        let cached = self.body_cache.borrow().is_some();
+        if !cached {
+            // Get the signature out of the headers
+            let v = match self.headers.iter().position(|x| { x.0 == HEADER_FIELD_SIGNATURE }) {
+                Some(idx) => &self.headers[idx].1,
+                None => return Ok(None)
+            };
 
-        // Get the signature out of the headers
-        let v = match self.headers.iter().position(|x| { x.0 == HEADER_FIELD_SIGNATURE }) {
-            Some(idx) => &self.headers[idx].1,
-            None => return Ok(None)
-        };
+            let sigval = match *v.object {
+                Value::BasicValue(BasicValue::Signature(ref x)) => x,
+                _ => return Ok(None)
+            };
 
-        let sigval = match *v.object {
-            Value::BasicValue(BasicValue::Signature(ref x)) => x,
-            _ => return Ok(None)
-        };
-
-        let mut sig = "(".to_owned() + &sigval.0 + ")";
-        let mut offset = 0;
-        match try!(demarshal(&mut self.body, &mut offset, &mut sig)) {
-            Value::Struct(x) => Ok(Some(x.objects)),
-            x => panic!("Didn't get a struct: {:?}", x)
+            let mut body = self.body.clone();
+            let mut sig = "(".to_owned() + &sigval.0 + ")";
+            let mut offset = 0;
+            *self.body_cache.borrow_mut() = Some((|| {
+                match try!(demarshal(&mut body, &mut offset, &mut sig)) {
+                    Value::Struct(x) => Ok(Some(x.objects)),
+                    x => panic!("Didn't get a struct: {:?}", x)
+                }
+            })());
         }
+        self.body_cache.borrow().as_ref().unwrap().clone()
     }
 }
 
