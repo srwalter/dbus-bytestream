@@ -20,6 +20,8 @@
 
 use std::collections::VecDeque;
 use std::env;
+use std::error;
+use std::fmt;
 use std::net::{TcpStream,ToSocketAddrs};
 use std::io;
 use std::io::{Read,Write};
@@ -106,6 +108,33 @@ impl From<string::FromUtf8Error> for Error {
 impl From<ParseIntError> for Error {
     fn from(_x: ParseIntError) -> Self {
         Error::AuthFailed
+    }
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            Error::Disconnected              => write!(f, "disconnected"),
+            Error::IOError(ref ioerr)        => write!(f, "i/o error: {}", ioerr),
+            Error::DemarshalError(ref dmerr) => write!(f, "demarshall error: {}", dmerr),
+            Error::AddressError(ref addrerr) => write!(f, "address error: {:?}", addrerr),
+            Error::BadData                   => write!(f, "bad data"),
+            Error::AuthFailed                => write!(f, "authentication failed"),
+            Error::NoEnvironment             => write!(f, "no environment"),
+        }
+    }
+}
+
+impl error::Error for Error {
+    fn description(&self) -> &str {
+        "D-Bus error"
+    }
+
+    fn cause(&self) -> Option<&error::Error> {
+        match *self {
+            Error::IOError(ref ioerr) => Some(ioerr),
+            _                         => None,
+        }
     }
 }
 

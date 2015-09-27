@@ -1,3 +1,4 @@
+use std::fmt;
 use std::collections::HashMap;
 use std::mem::transmute;
 
@@ -11,6 +12,21 @@ pub enum DemarshalError {
     BadSignature,
     ElementTooBig,
     MismatchedParens,
+}
+
+impl fmt::Display for DemarshalError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let msg = match *self {
+            DemarshalError::MessageTooShort  => "message too short",
+            DemarshalError::CorruptedMessage => "corrupted message",
+            DemarshalError::BadUTF8          => "bad utf-8",
+            DemarshalError::BadSignature     => "bad signature",
+            DemarshalError::ElementTooBig    => "element too big",
+            DemarshalError::MismatchedParens => "mismatched parens",
+        };
+
+        write!(f, "{}", msg)
+    }
 }
 
 pub fn get_alignment(sig: char) -> usize {
