@@ -7,7 +7,7 @@ use dbus_serialize::types::{Path,Variant,Value,BasicValue,Signature};
 use marshal::{Marshal,pad_to_multiple};
 use demarshal::{demarshal,DemarshalError};
 
-#[derive(Debug,Default,PartialEq)]
+#[derive(Debug,Default,PartialEq,Eq)]
 pub struct MessageType(pub u8);
 pub const MESSAGE_TYPE_INVALID : MessageType        = MessageType(0);
 pub const MESSAGE_TYPE_METHOD_CALL : MessageType    = MessageType(1);
