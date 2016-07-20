@@ -11,8 +11,10 @@
 //!     "org.freedesktop.DBus", // destination
 //!     "/org/freedesktop/DBus", // path
 //!     "org.freedesktop.DBus", //interface
-//!     "ListNames" // method
+//!     "RequestName" // method
 //! );
+//! msg = msg.add_arg(&"com.test.foobar")
+//!          .add_arg(&(0 as u32));
 //! let reply = conn.call_sync(msg);
 //! println!("{:?}", reply);
 //! ```
