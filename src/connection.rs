@@ -235,7 +235,7 @@ impl Connection {
 
     fn sock_auth_external(sock: &mut StreamSocket) -> Result<(),Error> {
         let uid = unsafe {
-            libc::funcs::posix88::unistd::getuid()
+            libc::getuid()
         };
         let uid_str = uid.to_string();
         let uid_hex = uid_str.into_bytes().to_hex();
@@ -259,7 +259,7 @@ impl Connection {
 
     fn sock_auth_cookie(sock: &mut StreamSocket) -> Result<(),Error> {
         let uid = unsafe {
-            libc::funcs::posix88::unistd::getuid()
+            libc::getuid()
         };
         let uid_str = uid.to_string();
         let uid_hex = uid_str.into_bytes().to_hex();
