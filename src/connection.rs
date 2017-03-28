@@ -7,7 +7,7 @@
 //! use dbus_bytestream::message;
 //!
 //! let conn = Connection::connect_system().unwrap();
-//! let msg = message::create_method_call(
+//! let mut msg = message::create_method_call(
 //!     "org.freedesktop.DBus", // destination
 //!     "/org/freedesktop/DBus", // path
 //!     "org.freedesktop.DBus", //interface
