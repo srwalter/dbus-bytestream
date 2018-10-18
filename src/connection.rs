@@ -34,8 +34,8 @@ use std::cell::RefCell;
 use std::str::FromStr;
 use std::string;
 use std::num::ParseIntError;
-use rand::Rand;
 use rand;
+use rand::prelude::*;
 use libc;
 use crypto::digest::Digest;
 use crypto;
@@ -286,8 +286,9 @@ impl Connection {
         let cookie = try!(get_cookie(words[0], words[1]));
 
         let mut my_challenge = Vec::new();
+        let mut rng = rand::thread_rng();
         for _ in 0..16 {
-            my_challenge.push(u8::rand(&mut rand::thread_rng()));
+            my_challenge.push(rng.gen());
         }
         let hex_challenge = my_challenge.to_hex();
 

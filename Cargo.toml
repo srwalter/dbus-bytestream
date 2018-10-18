@@ -8,9 +8,9 @@ version = "0.1.4"
 authors = ["Steven Walter <stevenrwalter@gmail.com>"]
 
 [dependencies]
-unix_socket = "0.4.3"
+unix_socket = "0.5"
 rustc-serialize = "0.3"
 libc = "0.2"
 dbus-serialize = "0.1"
-rand = "0.3"
-rust-crypto = "0.2.31"
+rand = "0.5"
+rust-crypto = "0.2.36"
